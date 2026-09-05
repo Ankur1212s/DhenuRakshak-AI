@@ -1,0 +1,4 @@
+# DhenuRakshak AI — Raspberry Pi Edge Gateway Dependencies
+# The gateway and edge AI engine run using Python 3 standard library.
+# Optional requests module for enhanced HTTP pooling:
+requests>=2.28.0

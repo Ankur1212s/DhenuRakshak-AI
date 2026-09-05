@@ -1,0 +1,18 @@
+[Unit]
+Description=DhenuRakshak AI Edge Gateway Daemon (Pi 3B+)
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/DhenuRakshak-AI/pi_gateway
+ExecStart=/usr/bin/python3 /home/pi/DhenuRakshak-AI/pi_gateway/edge_gateway.py --esp32 http://192.168.4.1/api/telemetry --cloud http://localhost:5173
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
