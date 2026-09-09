@@ -1,7 +1,4 @@
-﻿// Netlify Serverless Function: /api/telemetry
-// Ingests live telemetry from Raspberry Pi 3B+ Edge Gateway or ESP32 Collar
-// and serves the latest live metrics to the frontend dashboard.
-
+﻿// Netlify Serverless Function: /api/telemetry (ESM)
 let latestTelemetry = {
   node_id: "DHENU-COLLAR-01",
   cattle_id: "COW-102",
@@ -27,27 +24,26 @@ let latestTelemetry = {
   last_updated: new Date().toISOString()
 };
 
-exports.handler = async (event, context) => {
-  const headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Content-Type": "application/json"
-  };
+const headers = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Content-Type": "application/json"
+};
 
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 200, headers, body: "" };
+export default async function handler(req, context) {
+  if (req.method === "OPTIONS") {
+    return new Response("", { status: 200, headers });
   }
 
-  if (event.httpMethod === "POST") {
+  if (req.method === "POST") {
     try {
-      const payload = JSON.parse(event.body || "{}");
+      const payload = await req.json();
       latestTelemetry = {
         ...payload,
         last_updated: new Date().toISOString()
       };
 
-      // 7-14 Day Mastitis Risk Assessment
       const temp = Number(latestTelemetry.temperature_c) || 38.5;
       const cpm = Number(latestTelemetry.jaw_metrics?.chews_per_minute) || 0;
       let riskLevel = "LOW";
@@ -61,36 +57,23 @@ exports.handler = async (event, context) => {
         riskScore = 54.0;
       }
 
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          success: true,
-          message: "Telemetry ingested successfully by DhenuRakshak Netlify Cloud",
-          prediction: {
-            risk_level: riskLevel,
-            risk_score: riskScore,
-            forecast_window: "7 to 14 Days Early Warning",
-            cow_name: latestTelemetry.cow_name || "Kamdhenu"
-          }
-        })
-      };
+      return new Response(JSON.stringify({
+        success: true,
+        message: "Telemetry ingested successfully by DhenuRakshak Netlify Cloud",
+        prediction: {
+          risk_level: riskLevel,
+          risk_score: riskScore,
+          forecast_window: "7 to 14 Days Early Warning",
+          cow_name: latestTelemetry.cow_name || "Kamdhenu"
+        }
+      }), { status: 200, headers });
     } catch (err) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ success: false, error: err.message })
-      };
+      return new Response(JSON.stringify({ success: false, error: err.message }), { status: 400, headers });
     }
   }
 
-  // GET: Return latest live telemetry
-  return {
-    statusCode: 200,
-    headers,
-    body: JSON.stringify({
-      success: true,
-      telemetry: latestTelemetry
-    })
-  };
-};
+  return new Response(JSON.stringify({
+    success: true,
+    telemetry: latestTelemetry
+  }), { status: 200, headers });
+}
