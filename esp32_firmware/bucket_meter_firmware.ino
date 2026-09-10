@@ -32,6 +32,7 @@
 #include <esp_wifi.h>
 #include <SPI.h>
 #include <MFRC522.h>
+#include <esp_idf_version.h>
 
 // =====================================================================================
 //  CONFIGURATION & SENSOR SIMULATION TOGGLE
@@ -131,10 +132,19 @@ void beep(int count, int onDuration = 80, int offDuration = 60) {
 // =====================================================================================
 //  ESP-NOW TRANSMISSION CALLBACK
 // =====================================================================================
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+// ESP32 Arduino Core 3.0+ (IDF 5.x)
+void OnDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status) {
+  espNowSendSuccess = (status == ESP_NOW_SEND_SUCCESS);
+  Serial.printf("[ESP-NOW] Send Status: %s\n", espNowSendSuccess ? "DELIVERY_SUCCESS" : "NO_ACK_OR_BROADCAST");
+}
+#else
+// ESP32 Arduino Core 2.x (IDF 4.x)
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   espNowSendSuccess = (status == ESP_NOW_SEND_SUCCESS);
   Serial.printf("[ESP-NOW] Send Status: %s\n", espNowSendSuccess ? "DELIVERY_SUCCESS" : "NO_ACK_OR_BROADCAST");
 }
+#endif
 
 // Initialize ESP-NOW
 bool initEspNow() {

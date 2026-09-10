@@ -32,6 +32,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <Wire.h>
+#include <esp_idf_version.h>
 
 // =====================================================================================
 //  NODE & CATTLE CONFIGURATION
@@ -332,9 +333,17 @@ float readRealLM35Temperature() {
 // =====================================================================================
 //  ESP-NOW DIRECT WIRELESS SENDER
 // =====================================================================================
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+// ESP32 Arduino Core 3.0+ (IDF 5.x)
+void OnDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status) {
+  // Packet sent callback
+}
+#else
+// ESP32 Arduino Core 2.x (IDF 4.x)
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   // Packet sent callback
 }
+#endif
 
 bool initEspNow() {
   WiFi.mode(WIFI_STA);
