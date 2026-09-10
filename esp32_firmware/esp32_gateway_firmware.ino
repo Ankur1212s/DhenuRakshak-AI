@@ -20,6 +20,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#include <esp_idf_version.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
@@ -83,9 +84,9 @@ volatile uint8_t  lastReceivedType = 0;
 volatile bool     packetPendingUpload = false;
 
 // =====================================================================================
-//  ESP-NOW RECEIVE CALLBACK
+//  ESP-NOW RECEIVE LOGIC & COMPATIBILITY LAYER (ESP32 Core 2.x & 3.x)
 // =====================================================================================
-void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
+void processIncomingData(const uint8_t *mac, const uint8_t *incomingData, int len) {
   if (len <= 0) return;
 
   uint8_t msgType = incomingData[0]; // First byte indicates message type
@@ -126,6 +127,19 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
   }
 }
 
+// Universal Callback Wrapper (Automatically adapts to ESP32 Core 3.x and 2.x)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+// ESP32 Arduino Core 3.0+ (IDF 5.x)
+void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len) {
+  processIncomingData(recv_info->src_addr, incomingData, len);
+}
+#else
+// ESP32 Arduino Core 2.x (IDF 4.x)
+void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
+  processIncomingData(mac, incomingData, len);
+}
+#endif
+
 // =====================================================================================
 //  HTTP CLOUD UPLOADER (Pushes directly to MongoDB Atlas via Netlify)
 // =====================================================================================
@@ -149,7 +163,8 @@ bool uploadJsonToCloud(const String& jsonPayload) {
     if (httpCode == HTTP_CODE_OK || httpCode == 201) {
       String response = http.getString();
       Serial.println(F("[CLOUD] ✅ Successfully persisted in MongoDB Atlas!"));
-      Serial.println(F("[CLOUD] Server response: ") + response);
+      Serial.print(F("[CLOUD] Server response: "));
+      Serial.println(response);
       success = true;
     } else {
       Serial.printf("[CLOUD] Server returned code: %d\n", httpCode);
@@ -202,7 +217,7 @@ void processEarTagUpload(const EarTagPacket &pkt) {
   JsonObject jaw = doc.createNestedObject("jaw_metrics");
   jaw["dynamic_accel_g"]      = round(pkt.dynamic_accel_g * 100.0) / 100.0;
   jaw["total_chews"]          = pkt.total_chews;
-  jaw["chews_per_minute"]     = round(pkt.chews_per_minute * 10.0) / 10.0;
+  jaw["chews_per_minute"]     = round(pkt.chews_per_minute * 10.0) / 100.0;
   jaw["rumination_state"]     = pkt.rumination_state;
   jaw["rumination_active_sec"]= pkt.rumination_active_sec;
   jaw["is_chewing"]           = (pkt.chews_per_minute > 30.0f);
