@@ -1,4 +1,4 @@
-﻿// Netlify Serverless Function: /api/telemetry
+// Netlify Serverless Function: /api/telemetry
 // Ingests live telemetry from Raspberry Pi 3B+ Edge Gateway or ESP32 Collar
 // and serves the latest live metrics to the frontend dashboard.
 
@@ -47,13 +47,26 @@ exports.handler = async (event, context) => {
         last_updated: new Date().toISOString()
       };
 
-      // 7-14 Day Mastitis Risk Assessment
+      // Mastitis Risk Assessment (Collar & Bucket Meter EC/pH)
       const temp = Number(latestTelemetry.temperature_c) || 38.5;
       const cpm = Number(latestTelemetry.jaw_metrics?.chews_per_minute) || 0;
       let riskLevel = "LOW";
       let riskScore = 12.0;
 
-      if (temp >= 39.8) {
+      if (latestTelemetry.milk_ec_ms_cm !== undefined) {
+        const ec = Number(latestTelemetry.milk_ec_ms_cm);
+        const ph = Number(latestTelemetry.milk_ph) || 6.6;
+        if (ec >= 6.5 || ph >= 6.95) {
+          riskLevel = "HIGH";
+          riskScore = 92.5;
+        } else if (ec >= 5.7 || ph >= 6.80) {
+          riskLevel = "MEDIUM";
+          riskScore = 58.0;
+        } else {
+          riskLevel = "LOW";
+          riskScore = 8.5;
+        }
+      } else if (temp >= 39.8) {
         riskLevel = "HIGH";
         riskScore = 88.5;
       } else if (temp >= 39.2 || cpm < 30) {

@@ -1,4 +1,4 @@
-﻿// Netlify Serverless Function: /api/telemetry (ESM with MongoDB Atlas persistence)
+// Netlify Serverless Function: /api/telemetry (ESM with MongoDB Atlas persistence)
 import { MongoClient } from "mongodb";
 
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://antigravity:Ankur1212%24@cluster0.ohbtqbk.mongodb.net/lactoguard?retryWrites=true&w=majority&appName=Cluster0";
@@ -68,7 +68,21 @@ export default async function handler(req, context) {
       let riskLevel = "LOW";
       let riskScore = 12.0;
 
-      if (temp >= 39.8) {
+      // Check Bucket Milk Meter EC & pH
+      if (payload.milk_ec_ms_cm !== undefined) {
+        const ec = Number(payload.milk_ec_ms_cm);
+        const ph = Number(payload.milk_ph) || 6.6;
+        if (ec >= 6.5 || ph >= 6.95) {
+          riskLevel = "HIGH";
+          riskScore = 92.5;
+        } else if (ec >= 5.7 || ph >= 6.80) {
+          riskLevel = "MEDIUM";
+          riskScore = 58.0;
+        } else {
+          riskLevel = "LOW";
+          riskScore = 8.5;
+        }
+      } else if (temp >= 39.8) {
         riskLevel = "HIGH";
         riskScore = 88.5;
       } else if (temp >= 39.2 || cpm < 30) {
@@ -118,14 +132,22 @@ export default async function handler(req, context) {
   // ── GET: Query cow data directly from your MongoDB Atlas Database ──
   try {
     const url = new URL(req.url);
-    const cowParam = url.searchParams.get("cow") || url.searchParams.get("cattle_id");
+    const cowParam = url.searchParams.get("cow") || url.searchParams.get("cattle_id") || url.searchParams.get("rfid") || url.searchParams.get("rfid_tag");
 
     const col = await getMongoCollection();
 
     if (cowParam) {
-      // Query specific cow's recent telemetry logs from MongoDB
+      // Query specific cow's recent telemetry logs from MongoDB (by ID, RFID Tag, name, or node)
       const cowLogs = await col
-        .find({ $or: [{ cattle_id: cowParam }, { cow_name: new RegExp(cowParam, "i") }, { node_id: cowParam }] })
+        .find({
+          $or: [
+            { cattle_id: cowParam },
+            { rfid_tag: cowParam },
+            { rfid: cowParam },
+            { cow_name: new RegExp(cowParam, "i") },
+            { node_id: cowParam }
+          ]
+        })
         .sort({ created_at: -1 })
         .limit(20)
         .toArray();
