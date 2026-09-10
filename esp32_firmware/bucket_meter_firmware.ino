@@ -58,6 +58,7 @@
 //  ESP-NOW PACKET STRUCTURE (Packed binary struct, 101 bytes)
 // =====================================================================================
 typedef struct __attribute__((packed)) {
+  uint8_t msg_type;              // 1 = BUCKET_METER, 2 = EAR_TAG
   char device_type[16];          // "BUCKET_METER"
   char node_id[16];              // "DHENU-METER-01"
   char rfid_tag[16];             // e.g. "A3F87B02"
@@ -418,6 +419,7 @@ void loop() {
 
     // Fill Outgoing ESP-NOW Packet
     memset(&outgoingPacket, 0, sizeof(outgoingPacket));
+    outgoingPacket.msg_type = 1; // 1 = BUCKET_METER
     strncpy(outgoingPacket.device_type, "BUCKET_METER", sizeof(outgoingPacket.device_type) - 1);
     strncpy(outgoingPacket.node_id, DEVICE_NODE_ID, sizeof(outgoingPacket.node_id) - 1);
     strncpy(outgoingPacket.rfid_tag, currentRfidTag.c_str(), sizeof(outgoingPacket.rfid_tag) - 1);
