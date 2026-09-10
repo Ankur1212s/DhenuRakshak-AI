@@ -1,9 +1,19 @@
-﻿import { NavLink } from "react-router-dom";
+﻿import { NavLink, useNavigate } from "react-router-dom";
 import useCattleStore from "../store/cattleStore";
+import useAuthStore from "../store/authStore";
+import toast from "react-hot-toast";
 
 export default function TopNav() {
+  const navigate = useNavigate();
   const { cattle } = useCattleStore();
+  const { user, logout } = useAuthStore();
   const alertCount = cattle.filter((c) => c.riskLevel === "HIGH" || c.riskLevel === "MEDIUM").length;
+
+  const handleLogout = () => {
+    logout();
+    toast.success("Logged out successfully");
+    navigate("/login", { replace: true });
+  };
 
   return (
     <header className="bg-white border-b-2 border-[#800000] sticky top-0 z-50 shadow-sm font-sans">
@@ -45,17 +55,36 @@ export default function TopNav() {
           </div>
         </div>
 
-        {/* Status Pills */}
-        <div className="flex items-center space-x-2 text-xs">
+        {/* Right Header Controls: Alerts + User Profile + Logout */}
+        <div className="flex items-center space-x-3 text-xs">
           {alertCount > 0 ? (
             <span className="bg-[#800000] text-white font-bold px-2.5 py-1 rounded text-xs shadow-sm">
-              {alertCount} Active Alerts
+              {alertCount} Alerts
             </span>
           ) : (
             <span className="bg-emerald-700 text-white font-semibold px-2.5 py-1 rounded text-xs">
               Herd Nominal
             </span>
           )}
+
+          {/* User & Logout Button */}
+          <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
+            <div className="text-right hidden sm:block">
+              <span className="font-bold text-slate-800 text-xs block leading-tight">
+                {user?.name || "Ramesh Patel"}
+              </span>
+              <span className="text-[10px] text-slate-500 block">
+                {user?.farmName || "Surabhi Farm"}
+              </span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="bg-slate-100 hover:bg-red-50 hover:text-red-700 hover:border-red-300 text-slate-700 font-bold px-3 py-1.5 rounded border border-slate-300 transition-colors text-xs"
+              title="Logout from portal"
+            >
+              Logout ⎋
+            </button>
+          </div>
         </div>
       </div>
 
