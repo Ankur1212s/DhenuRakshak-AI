@@ -1,227 +1,139 @@
 /*
  * =====================================================================================
- *  🐄 LactoGuard / DhenuRakshak AI — Central ESP32 Edge Gateway (Wi-Fi + 4G GSM)
+ *  🐄 LactoGuard / DhenuRakshak AI — Central ESP32 Edge Gateway (ESP-NOW + Wi-Fi)
+ *  Protocol: ESP-NOW (Receives from Bucket Meters) + Wi-Fi (Uplinks to Cloud MongoDB)
  *  Target Hardware: Central ESP32 DevKit V1 (30/38 pin)
  * =====================================================================================
- *  Architecture & Function:
- *   1. Local Wi-Fi Access Point ("Dhenu-Gateway"):
- *      - IP: 192.168.4.1
- *      - Listens for HTTP POST from Handheld Bucket Meters & Cattle Collars.
- *
- *   2. Cloud Uplink (Hybrid Redundancy):
- *      - Primary: Farm Wi-Fi Router / Hotspot (if within range)
- *      - Backup: 4G LTE GSM Module (SIMCOM A7670C / SIM7600 / SIM800L)
- *        connected via Hardware UART2:
- *          ESP32 RX2 (GPIO 16) <--> GSM TXD
- *          ESP32 TX2 (GPIO 17) <--> GSM RXD
- *          GND                 <--> GSM GND
- *
- *   3. MongoDB Atlas Ingest:
- *      - Posts all milking metrics directly to Netlify/MongoDB Cloud endpoint:
- *        https://dhenurakshak.netlify.app/api/telemetry
+ *  How it Works:
+ *   1. Gateway connects to your local Wi-Fi router / phone hotspot for internet.
+ *   2. Simultaneously listens for ESP-NOW transmissions from any bucket meters in range.
+ *   3. When a bucket meter sends a milking packet via ESP-NOW:
+ *      - Gateway receives it in milliseconds (< 5ms).
+ *      - Blinks activity LED and logs details to Serial Monitor.
+ *      - Sends HTTP POST directly to: https://dhenurakshak.netlify.app/api/telemetry
+ *      - Netlify serverless function saves it permanently in your MongoDB Atlas cluster!
  * =====================================================================================
  */
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WebServer.h>
+#include <esp_now.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
 // =====================================================================================
-//  CONFIGURATION
+//  WI-FI CONFIGURATION
+//  (Enter your home/barn Wi-Fi or phone hotspot credentials below)
 // =====================================================================================
-// Local AP for Bucket Meters and Collars to connect to:
-const char* AP_SSID = "Dhenu-Gateway";
-const char* AP_PASS = "lactoguard123";
+const char* WIFI_SSID = "POCO X5 Pro 5G";       // <-- Replace with your Wi-Fi SSID
+const char* WIFI_PASS = "12345678";             // <-- Replace with your Wi-Fi Password
 
-// Farm Wi-Fi Router / Mobile Hotspot for primary internet:
-const char* STA_ROUTER_SSID = "Farm_WiFi";         // Set your farm Wi-Fi name
-const char* STA_ROUTER_PASS = "FarmPassword123";   // Set your farm Wi-Fi password
-
-// Cloud Telemetry Ingest URL (Connected to user's MongoDB Atlas cluster)
+// Cloud Backend Ingest URL (Stores into MongoDB Atlas)
 const char* CLOUD_INGEST_URL = "https://dhenurakshak.netlify.app/api/telemetry";
 
-// 4G GSM UART Pins (HardwareSerial 2)
-#define GSM_RX_PIN        16   // ESP32 RX2 connected to GSM Module TX
-#define GSM_TX_PIN        17   // ESP32 TX2 connected to GSM Module RX
-#define GSM_BAUD_RATE     115200
-
-#define PIN_STATUS_LED    2    // Gateway Activity Indicator
-
-// Hardware Serial instance for 4G GSM Module
-HardwareSerial gsmSerial(2);
-
-// Web Server running on Port 80
-WebServer server(80);
-
-// Global status flags
-bool wifiInternetAvailable = false;
-bool gsmAvailable = false;
+#define PIN_STATUS_LED    2    // Onboard status LED
 
 // =====================================================================================
-//  4G GSM AT COMMAND HELPERS (SIMCOM A7670C / SIM7600)
+//  ESP-NOW PACKET STRUCTURE (Matches Bucket Meter 1:1)
 // =====================================================================================
-String sendGsmCommand(const String& cmd, unsigned long timeoutMs = 3000) {
-  while (gsmSerial.available()) gsmSerial.read(); // flush buffer
-  gsmSerial.println(cmd);
+typedef struct __attribute__((packed)) {
+  char device_type[16];          // "BUCKET_METER"
+  char node_id[16];              // "DHENU-METER-01"
+  char rfid_tag[16];             // e.g. "A3F87B02"
+  char cattle_id[16];            // "COW-A3F8"
+  float milk_ec_ms_cm;           // e.g. 4.85 mS/cm
+  float milk_ph;                 // e.g. 6.64
+  uint32_t milking_duration_sec; // e.g. 315
+  uint32_t samples_count;        // e.g. 450
+  char mastitis_indication[24];  // "HEALTHY_NORMAL", etc.
+  uint8_t battery_pct;           // e.g. 95%
+} MilkingPacket;
 
-  String response = "";
-  unsigned long start = millis();
-  while (millis() - start < timeoutMs) {
-    while (gsmSerial.available()) {
-      char c = gsmSerial.read();
-      response += c;
-    }
-    if (response.indexOf("OK") != -1 || response.indexOf("ERROR") != -1) break;
+MilkingPacket receivedPacket;
+volatile bool newPacketReceived = false;
+
+// =====================================================================================
+//  ESP-NOW RECEIVE CALLBACK
+// =====================================================================================
+void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
+  if (len == sizeof(MilkingPacket)) {
+    memcpy(&receivedPacket, incomingData, sizeof(MilkingPacket));
+    newPacketReceived = true;
+
+    char macStr[18];
+    snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    Serial.println(F("\n======================================================="));
+    Serial.printf("📥 [ESP-NOW RECV] Packet from Meter MAC: %s\n", macStr);
+    Serial.printf("   Cow RFID Tag : %s | Cattle ID: %s\n", receivedPacket.rfid_tag, receivedPacket.cattle_id);
+    Serial.printf("   Milk EC      : %.2f mS/cm\n", receivedPacket.milk_ec_ms_cm);
+    Serial.printf("   Milk pH      : %.2f\n", receivedPacket.milk_ph);
+    Serial.printf("   Duration     : %u seconds | Samples: %u\n", receivedPacket.milking_duration_sec, receivedPacket.samples_count);
+    Serial.printf("   Indication   : %s\n", receivedPacket.mastitis_indication);
+    Serial.println(F("======================================================="));
+  } else {
+    Serial.printf("[ESP-NOW] Received unexpected packet length: %d bytes (expected %d)\n", len, sizeof(MilkingPacket));
   }
-  return response;
 }
 
-bool initGsmModule() {
-  Serial.println(F("[GSM] Initializing 4G LTE Modem (SIMCOM A7670C / SIM7600)..."));
-  gsmSerial.begin(GSM_BAUD_RATE, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
-  delay(1000);
-
-  // Test AT
-  String resp = sendGsmCommand("AT", 1500);
-  if (resp.indexOf("OK") == -1) {
-    Serial.println(F("[GSM] ⚠️ Modem not responding on UART2."));
+// =====================================================================================
+//  FORWARD TELEMETRY TO CLOUD MONGODB
+// =====================================================================================
+bool forwardToMongoDBCloud(const MilkingPacket &pkt) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println(F("[CLOUD] ⚠️ Cannot forward: Wi-Fi is disconnected!"));
     return false;
   }
 
-  sendGsmCommand("ATE0", 1000);           // Echo off
-  sendGsmCommand("AT+CPIN?", 2000);        // Check SIM status
-  sendGsmCommand("AT+CREG?", 2000);        // Check Network Registration
-  sendGsmCommand("AT+NETOPEN", 3000);      // Open Network (for SIMCOM LTE)
+  digitalWrite(PIN_STATUS_LED, HIGH);
 
-  Serial.println(F("[GSM] 4G LTE GSM Modem online and ready for cloud backup!"));
-  return true;
-}
+  // Build JSON Document
+  StaticJsonDocument<512> doc;
+  doc["device_type"]          = pkt.device_type;
+  doc["node_id"]              = pkt.node_id;
+  doc["rfid_tag"]             = pkt.rfid_tag;
+  doc["rfid"]                 = pkt.rfid_tag;
+  doc["cattle_id"]            = pkt.cattle_id;
+  doc["cow_name"]             = "Cow #" + String(pkt.rfid_tag).substring(0, min((unsigned int)strlen(pkt.rfid_tag), 4U));
+  doc["milk_ec_ms_cm"]        = round(pkt.milk_ec_ms_cm * 100.0) / 100.0;
+  doc["milk_ph"]              = round(pkt.milk_ph * 100.0) / 100.0;
+  doc["milking_duration_sec"] = pkt.milking_duration_sec;
+  doc["samples_count"]        = pkt.samples_count;
+  doc["mastitis_indication"]  = pkt.mastitis_indication;
+  doc["battery_pct"]          = pkt.battery_pct;
+  doc["gateway_node"]         = "ESP32-GATEWAY-01";
+  doc["gateway_rssi"]         = WiFi.RSSI();
 
-// Forward JSON via 4G GSM HTTP POST
-bool postViaGsm(const String& jsonPayload) {
-  Serial.println(F("[GSM] Sending payload via 4G LTE GSM uplink..."));
-  sendGsmCommand("AT+HTTPINIT", 2000);
-  sendGsmCommand("AT+HTTPPARA=\"URL\",\"" + String(CLOUD_INGEST_URL) + "\"", 2000);
-  sendGsmCommand("AT+HTTPPARA=\"CONTENT\",\"application/json\"", 1500);
+  String jsonPayload;
+  serializeJson(doc, jsonPayload);
 
-  // Send data length
-  String postDataCmd = "AT+HTTPDATA=" + String(jsonPayload.length()) + ",5000";
-  gsmSerial.println(postDataCmd);
-  delay(200);
-  gsmSerial.print(jsonPayload);
-  delay(500);
+  Serial.println(F("[CLOUD] Uploading JSON to MongoDB Atlas via Netlify:"));
+  Serial.println(jsonPayload);
 
-  // Execute POST (action=1)
-  String actionResp = sendGsmCommand("AT+HTTPACTION=1", 8000);
-  sendGsmCommand("AT+HTTPTERM", 1500);
-
-  if (actionResp.indexOf(",200,") != -1 || actionResp.indexOf(",201,") != -1) {
-    Serial.println(F("[GSM] 4G POST Successful (HTTP 200/201)!"));
-    return true;
-  }
-
-  Serial.println(F("[GSM] ⚠️ 4G POST returned non-200 status"));
-  return false;
-}
-
-// Forward JSON via Wi-Fi HTTP POST
-bool postViaWiFi(const String& jsonPayload) {
   HTTPClient http;
   http.begin(CLOUD_INGEST_URL);
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(6000);
 
   int httpCode = http.POST(jsonPayload);
-  bool ok = false;
-  if (httpCode == HTTP_CODE_OK || httpCode == 201) {
-    Serial.printf("[UPLINK-WIFI] Successfully forwarded to Cloud DB! Code: %d\n", httpCode);
-    ok = true;
+  bool success = false;
+
+  if (httpCode > 0) {
+    Serial.printf("[CLOUD] HTTP Response Code: %d\n", httpCode);
+    if (httpCode == HTTP_CODE_OK || httpCode == 201) {
+      String response = http.getString();
+      Serial.println(F("[CLOUD] ✅ Successfully persisted in MongoDB Atlas!"));
+      Serial.println(F("[CLOUD] Response: ") + response);
+      success = true;
+    }
   } else {
-    Serial.printf("[UPLINK-WIFI] Cloud HTTP POST failed (%d): %s\n", httpCode, http.errorToString(httpCode).c_str());
+    Serial.printf("[CLOUD] ❌ HTTP POST failed: %s\n", http.errorToString(httpCode).c_str());
   }
+
   http.end();
-  return ok;
-}
-
-// Forward payload to Cloud using Wi-Fi if available, otherwise fallback to 4G GSM
-bool forwardToCloud(const String& jsonPayload) {
-  // 1. Try Wi-Fi internet uplink first
-  if (WiFi.status() == WL_CONNECTED) {
-    if (postViaWiFi(jsonPayload)) return true;
-  }
-
-  // 2. Fallback to 4G LTE GSM
-  if (gsmAvailable) {
-    return postViaGsm(jsonPayload);
-  }
-
-  return false;
-}
-
-// =====================================================================================
-//  HTTP REST HANDLERS
-// =====================================================================================
-void handleBucketTelemetry() {
-  if (server.method() != HTTP_POST) {
-    server.send(405, "application/json", "{\"error\":\"Method Not Allowed\"}");
-    return;
-  }
-
-  digitalWrite(PIN_STATUS_LED, HIGH);
-  String payload = server.arg("plain");
-
-  Serial.println(F("\n======================================================="));
-  Serial.println(F("📥 [GATEWAY INGEST] Received Telemetry from Bucket Meter:"));
-  Serial.println(payload);
-  Serial.println(F("======================================================="));
-
-  // Parse incoming JSON
-  StaticJsonDocument<768> doc;
-  DeserializationError err = deserializeJson(doc, payload);
-
-  if (err) {
-    Serial.printf("[ERROR] JSON parse failed: %s\n", err.c_str());
-    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
-    digitalWrite(PIN_STATUS_LED, LOW);
-    return;
-  }
-
-  // Enrich payload with Gateway metadata
-  doc["gateway_node"] = "DHENU-GATEWAY-ESP32";
-  doc["gateway_rssi"] = WiFi.RSSI();
-  doc["gateway_time"] = millis();
-
-  String enrichedPayload;
-  serializeJson(doc, enrichedPayload);
-
-  // Forward to MongoDB Atlas Cloud Backend
-  bool forwardSuccess = forwardToCloud(enrichedPayload);
-
-  StaticJsonDocument<256> respDoc;
-  respDoc["success"] = true;
-  respDoc["message"] = "Telemetry ingested by ESP32 Gateway";
-  respDoc["cloud_forwarded"] = forwardSuccess;
-  respDoc["cow_rfid"] = doc["rfid_tag"] | "UNKNOWN";
-
-  String respJson;
-  serializeJson(respDoc, respJson);
-
-  server.send(200, "application/json", respJson);
   digitalWrite(PIN_STATUS_LED, LOW);
-}
-
-void handleRoot() {
-  String html = "<html><head><title>DhenuRakshak ESP32 Gateway</title></head>";
-  html += "<body style='font-family:sans-serif;padding:20px;'>";
-  html += "<h2>🐄 LactoGuard / DhenuRakshak AI — Farm Gateway</h2>";
-  html += "<p>Status: <strong>Active & Listening</strong></p>";
-  html += "<p>Wi-Fi Internet: <strong>" + String(WiFi.status() == WL_CONNECTED ? "CONNECTED" : "OFFLINE") + "</strong></p>";
-  html += "<p>4G GSM Backup: <strong>" + String(gsmAvailable ? "ONLINE" : "STANDBY / NO MODEM") + "</strong></p>";
-  html += "<p>Connected Bucket Meter Endpoint: <code>POST /api/bucket-telemetry</code></p>";
-  html += "</body></html>";
-  server.send(200, "text/html", html);
+  return success;
 }
 
 // =====================================================================================
@@ -231,61 +143,77 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
-  Serial.println(F("\n======================================================="));
-  Serial.println(F("🐄 LactoGuard / DhenuRakshak AI — ESP32 Edge Gateway"));
-  Serial.println(F("======================================================="));
-
   pinMode(PIN_STATUS_LED, OUTPUT);
   digitalWrite(PIN_STATUS_LED, LOW);
 
-  // Configure Wi-Fi in AP+STA dual mode:
-  // AP: Bucket meters connect directly to ESP32
-  // STA: ESP32 connects to Farm Router for primary internet
-  WiFi.mode(WIFI_AP_STA);
+  Serial.println(F("\n======================================================="));
+  Serial.println(F("🐄 LactoGuard / DhenuRakshak AI — Central ESP32 Gateway"));
+  Serial.println(F("======================================================="));
 
-  // 1. Setup Local Access Point
-  WiFi.softAP(AP_SSID, AP_PASS);
-  IPAddress apIP = WiFi.softAPIP();
-  Serial.print(F("[WIFI-AP] Local Gateway AP created: "));
-  Serial.println(AP_SSID);
-  Serial.print(F("[WIFI-AP] Gateway IP: "));
-  Serial.println(apIP);
+  // Set Wi-Fi to Station Mode
+  WiFi.mode(WIFI_STA);
 
-  // 2. Connect to Farm Router (if available)
-  Serial.print(F("[WIFI-STA] Connecting to Farm Router: "));
-  Serial.println(STA_ROUTER_SSID);
-  WiFi.begin(STA_ROUTER_SSID, STA_ROUTER_PASS);
+  // Connect to Wi-Fi router / phone hotspot
+  Serial.print(F("[WIFI] Connecting to "));
+  Serial.println(WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
 
-  unsigned long startWait = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startWait < 5000) {
-    delay(250);
+  unsigned long startWifi = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startWifi < 10000) {
+    delay(300);
     Serial.print(".");
+    digitalWrite(PIN_STATUS_LED, !digitalRead(PIN_STATUS_LED));
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println(F("\n[WIFI-STA] Internet connected! Farm IP: "));
+    Serial.println(F("\n[WIFI] Connected! Gateway IP: "));
     Serial.println(WiFi.localIP());
-    wifiInternetAvailable = true;
+    Serial.printf("[WIFI] Operating on Wi-Fi Channel: %d\n", WiFi.channel());
+    digitalWrite(PIN_STATUS_LED, HIGH);
   } else {
-    Serial.println(F("\n[WIFI-STA] Router not found. 4G GSM will handle cloud uplink."));
-    wifiInternetAvailable = false;
+    Serial.println(F("\n[WIFI] ⚠️ Could not connect to Wi-Fi. (Will retry in background)"));
+    digitalWrite(PIN_STATUS_LED, LOW);
   }
 
-  // 3. Initialize 4G GSM Backup
-  gsmAvailable = initGsmModule();
+  // Initialize ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println(F("[ESP-NOW] Error initializing ESP-NOW receiver!"));
+    return;
+  }
 
-  // 4. Start HTTP Server
-  server.on("/", HTTP_GET, handleRoot);
-  server.on("/api/bucket-telemetry", HTTP_POST, handleBucketTelemetry);
-  server.begin();
-  Serial.println(F("[HTTP] Gateway WebServer running on port 80"));
-  Serial.println(F("[READY] Awaiting bucket meter transmissions..."));
+  // Register Receive Callback
+  esp_now_register_recv_cb(OnDataRecv);
+  Serial.println(F("[ESP-NOW] Receiver Online! Listening for Bucket Meters..."));
+  Serial.println(F("[READY] Gateway is active and waiting for milking data."));
 }
 
 // =====================================================================================
-//  LOOP
+//  MAIN LOOP
 // =====================================================================================
 void loop() {
-  server.handleClient();
-  delay(5);
+  // Check if a new ESP-NOW packet was received
+  if (newPacketReceived) {
+    newPacketReceived = false;
+
+    // Flash LED
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(PIN_STATUS_LED, HIGH); delay(80);
+      digitalWrite(PIN_STATUS_LED, LOW);  delay(80);
+    }
+
+    // Forward to MongoDB Atlas Cloud
+    forwardToMongoDBCloud(receivedPacket);
+  }
+
+  // Auto-reconnect Wi-Fi if dropped
+  static unsigned long lastCheck = 0;
+  if (millis() - lastCheck > 15000) {
+    lastCheck = millis();
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println(F("[WIFI] Connection lost. Reconnecting..."));
+      WiFi.reconnect();
+    }
+  }
+
+  delay(20);
 }

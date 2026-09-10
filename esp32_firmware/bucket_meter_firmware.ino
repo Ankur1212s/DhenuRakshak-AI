@@ -1,135 +1,111 @@
 /*
  * =====================================================================================
  *  🐄 LactoGuard / DhenuRakshak AI — Smart Milking Bucket Handheld Meter Firmware
+ *  Protocol: ESP-NOW (Ultra low-latency, connectionless, direct to Central Gateway)
  *  Target Hardware: ESP32 DevKit V1 (30/38 pin)
  * =====================================================================================
- *  Sensors & Peripherals:
- *   1. MFRC522 RFID Reader (SPI @ 13.56 MHz):
- *      - 3.3V  -> ESP32 3V3 (⚠️ NEVER connect to 5V rail!)
- *      - GND   -> ESP32 GND
- *      - RST   -> GPIO 22
- *      - SDA/SS-> GPIO 5
- *      - MOSI  -> GPIO 23
- *      - MISO  -> GPIO 19
- *      - SCK   -> GPIO 18
- *
- *   2. Push Buttons (Active LOW with internal INPUT_PULLUP):
- *      - START Button -> GPIO 13 to GND
- *      - SEND Button  -> GPIO 14 to GND
- *
- *   3. Analog Sensors (ADC1 ONLY - safe from Wi-Fi & ADC2 conflicts):
- *      - Analog Milk EC (Conductivity) -> GPIO 34 (ADC1_CH6)
- *      - Analog Milk pH Probe (Po)     -> GPIO 35 (ADC1_CH7)
- *      - Sensor VCC -> 5V (from 5V / VIN rail)
- *      - Sensor GND -> ESP32 Common GND
- *
- *   4. Audio / Visual Feedback:
- *      - Active Buzzer -> GPIO 15 (via 220Ω resistor or direct 3.3V/5V)
- *      - Status LED Green (Ready / Ok) -> GPIO 2 (Onboard or External)
- *      - Status LED Blue (Milking / TX) -> GPIO 4
- *
- *  Operational State Flow:
- *   [1] STANDBY: Taps ear tag to read Cow RFID (UID). Beeps & locks tag.
- *   [2] READY: Farmer clips meter to bucket wall.
- *   [3] START: Farmer presses START button -> enters continuous sampling (EC & pH).
- *   [4] SEND: Milking complete -> Farmer presses SEND button.
- *   [5] TRANSMIT: Turns ON Wi-Fi, connects to ESP32 Gateway AP, POSTs JSON payload,
- *                 beeps confirmation, turns OFF Wi-Fi (powersave), resets to [1].
+ *  Features:
+ *   - ESP-NOW direct wireless transmission (< 5ms transmit time, NO router needed!)
+ *   - Sensor Simulation Mode (Realistic biological random EC & pH values when probes are not connected)
+ *   - MFRC522 RFID reader (with simulated fallback if RFID reader is not yet wired)
+ *   - START & SEND Push Button control
+ *   - Audio-visual feedback via Buzzer & LEDs
+ * =====================================================================================
+ *  Pin Connections:
+ *   1. START Button: GPIO 13 (to GND, internal pull-up)
+ *   2. SEND Button:  GPIO 14 (to GND, internal pull-up)
+ *   3. Buzzer:       GPIO 15 (Active Buzzer to GND)
+ *   4. Green LED:    GPIO 2  (Built-in / External with 330Ω resistor)
+ *   5. Blue/Red LED: GPIO 4  (External with 330Ω resistor)
+ *   6. MFRC522 RFID (Optional if physical sensor wired):
+ *      - 3.3V -> ESP32 3V3 (⚠️ NEVER 5V!) | GND -> GND | RST -> GPIO 22
+ *      - SDA(SS) -> GPIO 5 | MOSI -> GPIO 23 | MISO -> GPIO 19 | SCK -> GPIO 18
+ *   7. Physical EC & pH Probes (When connected later):
+ *      - EC Analog -> GPIO 34 (ADC1_CH6)
+ *      - pH Analog -> GPIO 35 (ADC1_CH7)
  * =====================================================================================
  */
 
 #include <Arduino.h>
+#include <WiFi.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
 
 // =====================================================================================
-//  PIN DEFINITIONS
+//  CONFIGURATION & SENSOR SIMULATION TOGGLE
 // =====================================================================================
-#define PIN_RC522_SS       5
-#define PIN_RC522_RST      22
-#define PIN_BTN_START      13
-#define PIN_BTN_SEND       14
-#define PIN_EC_ADC         34    // ADC1_CH6
-#define PIN_PH_ADC         35    // ADC1_CH7
-#define PIN_BUZZER         15
-#define PIN_LED_GREEN      2     // Built-in LED on most ESP32 DevKits
-#define PIN_LED_BLUE       4
+// Set to true to simulate realistic milk EC & pH without physical sensors
+// Set to false when your physical analog EC and pH probes are plugged into GPIO 34 & 35
+#define SIMULATE_SENSORS        true
 
-// =====================================================================================
-//  DEVICE & NETWORK CONFIGURATION
-// =====================================================================================
-#define DEVICE_NODE_ID     "DHENU-METER-01"
+#define DEVICE_NODE_ID          "DHENU-METER-01"
+#define DEFAULT_SIMULATED_RFID  "A3F87B02"
 
-// Central ESP32 Gateway Wi-Fi Access Point Details
-const char* GATEWAY_SSID = "Dhenu-Gateway";
-const char* GATEWAY_PASS = "lactoguard123";
-const char* GATEWAY_URL  = "http://192.168.4.1/api/bucket-telemetry";
-
-// Direct Cloud Backup (Optional: If meter connects directly to barn Wi-Fi / phone hotspot)
-const char* CLOUD_DIRECT_URL = "https://dhenurakshak.netlify.app/api/telemetry";
+// Pin Definitions
+#define PIN_RC522_SS            5
+#define PIN_RC522_RST           22
+#define PIN_BTN_START           13
+#define PIN_BTN_SEND            14
+#define PIN_EC_ADC              34
+#define PIN_PH_ADC              35
+#define PIN_BUZZER              15
+#define PIN_LED_GREEN           2     // Built-in LED on ESP32
+#define PIN_LED_BLUE            4
 
 // =====================================================================================
-//  SENSOR CALIBRATION CONSTANTS
+//  ESP-NOW PACKET STRUCTURE (Packed binary struct, 101 bytes)
 // =====================================================================================
-// ESP32 ADC: 12-bit (0 - 4095), 3.3V reference
-#define ADC_VOLTAGE_REF    3.3f
-#define ADC_RESOLUTION     4095.0f
+typedef struct __attribute__((packed)) {
+  char device_type[16];          // "BUCKET_METER"
+  char node_id[16];              // "DHENU-METER-01"
+  char rfid_tag[16];             // e.g. "A3F87B02"
+  char cattle_id[16];            // "COW-A3F8"
+  float milk_ec_ms_cm;           // e.g. 4.85 mS/cm
+  float milk_ph;                 // e.g. 6.64
+  uint32_t milking_duration_sec; // e.g. 315 seconds
+  uint32_t samples_count;        // e.g. 450
+  char mastitis_indication[24];  // "HEALTHY_NORMAL", "SUBCLINICAL_WARNING", "CLINICAL_ALERT"
+  uint8_t battery_pct;           // e.g. 95%
+} MilkingPacket;
 
-// pH Sensor (pH-4502C / DFRobot Analog pH):
-// Standard: pH 7.0 = 2.50V (Offset can be calibrated with trimmer pot on pH-4502C)
-// Slope: -5.70 pH per Volt
-#define PH_CALIBRATION_OFFSET   0.00f
-#define PH_SLOPE                -5.70f
-#define PH_NEUTRAL_VOLTAGE      2.50f
+MilkingPacket outgoingPacket;
 
-// EC Sensor (DFRobot EC or Analog Conductivity Probe):
-// Cell constant K = 1.0 (typical)
-// Formula: EC (mS/cm) = (Voltage / 1000) * K * 1000
-#define EC_K_CONSTANT           1.0f
+// Broadcast MAC Address (FF:FF:FF:FF:FF:FF reaches ANY Gateway in range)
+uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-// Thresholds for Bovine Mastitis Screening:
-// Healthy Fresh Milk:  EC 4.0 - 5.5 mS/cm  | pH 6.50 - 6.75
-// Subclinical Warning: EC 5.6 - 6.4 mS/cm  | pH 6.76 - 6.95
-// Clinical Mastitis:   EC >= 6.5 mS/cm     | pH >= 6.95
-#define EC_SUBCLINICAL_THRESHOLD  5.6f
-#define EC_CLINICAL_THRESHOLD     6.5f
-#define PH_SUBCLINICAL_THRESHOLD  6.76f
-#define PH_CLINICAL_THRESHOLD     6.95f
+// Hardware RFID Instance
+MFRC522 mfrc522(PIN_RC522_SS, PIN_RC522_RST);
+bool rfidHardwareAvailable = false;
 
 // =====================================================================================
 //  STATE MACHINE ENUM
 // =====================================================================================
 enum MeterState {
-  STATE_STANDBY_RFID = 0,   // Waiting for RFID ear tag scan
-  STATE_READY_TO_MILK,      // Ear tag scanned, waiting for START button
+  STATE_STANDBY_RFID = 0,   // Waiting for RFID ear tag scan (or button tap)
+  STATE_READY_TO_MILK,      // Ear tag locked, ready for START button
   STATE_MILKING_ACTIVE,     // Sampling milk EC and pH in bucket
-  STATE_MILKING_PAUSED,     // Milking finished, waiting for SEND button
-  STATE_TRANSMITTING        // Connecting to Gateway and uploading telemetry
+  STATE_TRANSMITTING        // Sending via ESP-NOW to Central Gateway
 };
 
 MeterState currentState = STATE_STANDBY_RFID;
 
-// Hardware RFID Instance
-MFRC522 mfrc522(PIN_RC522_SS, PIN_RC522_RST);
-
-// Milking Session Variables
+// Session Tracking
 String currentRfidTag = "";
 unsigned long sessionStartTime = 0;
 unsigned long sessionDurationSec = 0;
 
-// Sensor Accumulators for Running Average
+// Sensor Accumulators
 double ecAccumulator = 0;
 double phAccumulator = 0;
 unsigned long validSamplesCount = 0;
 
 float finalAvgEC = 0.0f;
 float finalAvgPH = 0.0f;
-String finalIndication = "NORMAL";
+String finalIndication = "HEALTHY_NORMAL";
 
-// Button Debounce Timers
+// Button Debounce
 unsigned long lastDebounceStart = 0;
 unsigned long lastDebounceSend = 0;
 const unsigned long DEBOUNCE_DELAY_MS = 250;
@@ -137,166 +113,115 @@ const unsigned long DEBOUNCE_DELAY_MS = 250;
 // LED Blink Timer
 unsigned long lastLedBlinkTime = 0;
 bool ledState = false;
+volatile bool espNowSendSuccess = false;
 
 // =====================================================================================
 //  BUZZER & FEEDBACK HELPERS
 // =====================================================================================
-void beepShort(int count = 1) {
+void beep(int count, int onDuration = 80, int offDuration = 60) {
   for (int i = 0; i < count; i++) {
     digitalWrite(PIN_BUZZER, HIGH);
-    delay(90);
+    delay(onDuration);
     digitalWrite(PIN_BUZZER, LOW);
-    if (i < count - 1) delay(70);
-  }
-}
-
-void beepLong(int count = 1) {
-  for (int i = 0; i < count; i++) {
-    digitalWrite(PIN_BUZZER, HIGH);
-    delay(350);
-    digitalWrite(PIN_BUZZER, LOW);
-    if (i < count - 1) delay(100);
-  }
-}
-
-void beepError() {
-  for (int i = 0; i < 3; i++) {
-    digitalWrite(PIN_BUZZER, HIGH);
-    delay(200);
-    digitalWrite(PIN_BUZZER, LOW);
-    delay(100);
+    if (i < count - 1) delay(offDuration);
   }
 }
 
 // =====================================================================================
-//  ANALOG SENSING & FILTERING
+//  ESP-NOW TRANSMISSION CALLBACK
 // =====================================================================================
-// Read Analog Pin with 32-sample multisampling for high stability & noise immunity
-float readCalibratedAdcVoltage(int pin) {
-  uint32_t rawSum = 0;
-  for (int i = 0; i < 32; i++) {
-    rawSum += analogRead(pin);
-    delayMicroseconds(100);
-  }
-  float avgRaw = (float)rawSum / 32.0f;
-  return (avgRaw / ADC_RESOLUTION) * ADC_VOLTAGE_REF;
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  espNowSendSuccess = (status == ESP_NOW_SEND_SUCCESS);
+  Serial.printf("[ESP-NOW] Send Status: %s\n", espNowSendSuccess ? "DELIVERY_SUCCESS" : "NO_ACK_OR_BROADCAST");
 }
 
-float measureMilkPH() {
-  float voltage = readCalibratedAdcVoltage(PIN_PH_ADC);
-  // pH Calculation: pH = 7.0 + ((2.5V - Voltage) * Slope)
-  float calculatedPH = 7.0f + ((PH_NEUTRAL_VOLTAGE - voltage) * PH_SLOPE) + PH_CALIBRATION_OFFSET;
-  
-  // Sanity clamp to biological bounds (4.0 - 9.0)
-  if (calculatedPH < 4.0f) calculatedPH = 4.0f;
-  if (calculatedPH > 9.0f) calculatedPH = 9.0f;
-  return calculatedPH;
-}
+// Initialize ESP-NOW
+bool initEspNow() {
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
 
-float measureMilkEC() {
-  float voltage = readCalibratedAdcVoltage(PIN_EC_ADC);
-  // DFRobot Analog EC Module or standard probe conversion:
-  // EC (mS/cm) proportional to voltage
-  float ec_ms_cm = (voltage / 3.3f) * 10.0f * EC_K_CONSTANT;
-  
-  if (ec_ms_cm < 0.0f) ec_ms_cm = 0.0f;
-  return ec_ms_cm;
-}
-
-// =====================================================================================
-//  RFID SCANNING HELPER
-// =====================================================================================
-bool checkRfidEarTag(String &tagUid) {
-  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
+  if (esp_now_init() != ESP_OK) {
+    Serial.println(F("[ESP-NOW] Error initializing ESP-NOW!"));
     return false;
   }
 
-  // Format UID as upper-case hex string (e.g., "A3F87B02")
+  esp_now_register_send_cb(OnDataSent);
+
+  // Register broadcast peer
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0; // channel 0 = any channel
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println(F("[ESP-NOW] Failed to add broadcast peer"));
+    return false;
+  }
+
+  Serial.println(F("[ESP-NOW] Initialized & Broadcast Peer Added!"));
+  return true;
+}
+
+// Channel-hopping broadcast sender (ensures gateway receives regardless of Wi-Fi channel)
+void broadcastMilkingPacket(MilkingPacket &pkt) {
+  Serial.println(F("\n[ESP-NOW] Broadcasting milking packet to Central Gateway..."));
+  for (uint8_t ch = 1; ch <= 11; ch++) {
+    esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+    esp_now_send(broadcastAddress, (uint8_t *)&pkt, sizeof(pkt));
+    delay(8);
+  }
+}
+
+// =====================================================================================
+//  SENSOR SIMULATION & MEASUREMENT
+// =====================================================================================
+float getSimulatedOrRealEC() {
+#if SIMULATE_SENSORS
+  // Realistic bovine milk EC: Normal fresh milk is 4.40 - 5.20 mS/cm
+  // Adds slight realistic dynamic fluctuation
+  float base = 4.75f;
+  float noise = ((float)random(-25, 26)) / 100.0f; // +-0.25 fluctuation
+  return base + noise;
+#else
+  // Read physical probe on GPIO 34
+  uint32_t sum = 0;
+  for (int i = 0; i < 16; i++) { sum += analogRead(PIN_EC_ADC); delayMicroseconds(50); }
+  float v = ((float)sum / 16.0f / 4095.0f) * 3.3f;
+  return (v / 3.3f) * 10.0f;
+#endif
+}
+
+float getSimulatedOrRealPH() {
+#if SIMULATE_SENSORS
+  // Realistic bovine milk pH: Normal fresh milk is 6.55 - 6.68
+  float base = 6.62f;
+  float noise = ((float)random(-6, 7)) / 100.0f; // +-0.06 fluctuation
+  return base + noise;
+#else
+  // Read physical probe on GPIO 35
+  uint32_t sum = 0;
+  for (int i = 0; i < 16; i++) { sum += analogRead(PIN_PH_ADC); delayMicroseconds(50); }
+  float v = ((float)sum / 16.0f / 4095.0f) * 3.3f;
+  return 7.0f + ((2.50f - v) * -5.70f);
+#endif
+}
+
+// =====================================================================================
+//  RFID DETECTION HELPER
+// =====================================================================================
+bool checkRfidEarTag(String &tagUid) {
+  if (!rfidHardwareAvailable) return false;
+  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return false;
+
   tagUid = "";
   for (byte i = 0; i < mfrc522.uid.size; i++) {
     if (mfrc522.uid.uidByte[i] < 0x10) tagUid += "0";
     tagUid += String(mfrc522.uid.uidByte[i], HEX);
   }
   tagUid.toUpperCase();
-
   mfrc522.PICC_HaltA();
   mfrc522.PCD_StopCrypto1();
   return true;
-}
-
-// =====================================================================================
-//  DATA TRANSMISSION TO CENTRAL ESP32 GATEWAY
-// =====================================================================================
-bool sendMilkingDataToGateway() {
-  digitalWrite(PIN_LED_GREEN, LOW);
-  digitalWrite(PIN_LED_BLUE, HIGH);
-
-  Serial.println(F("\n[NET] Activating Wi-Fi for telemetry uplink..."));
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(GATEWAY_SSID, GATEWAY_PASS);
-
-  unsigned long startWifi = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startWifi < 8000) {
-    delay(200);
-    digitalWrite(PIN_LED_BLUE, !digitalRead(PIN_LED_BLUE));
-    Serial.print(".");
-  }
-
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println(F("\n[ERROR] Could not connect to ESP32 Gateway AP!"));
-    WiFi.mode(WIFI_OFF);
-    return false;
-  }
-
-  Serial.println(F("\n[NET] Connected to Gateway! IP: "));
-  Serial.println(WiFi.localIP());
-
-  // Construct JSON Payload
-  StaticJsonDocument<512> doc;
-  doc["device_type"]          = "BUCKET_METER";
-  doc["node_id"]              = DEVICE_NODE_ID;
-  doc["rfid_tag"]             = currentRfidTag;
-  doc["cattle_id"]            = "COW-" + currentRfidTag.substring(0, min((unsigned int)currentRfidTag.length(), 4U));
-  doc["milk_ec_ms_cm"]        = round(finalAvgEC * 100.0) / 100.0;
-  doc["milk_ph"]              = round(finalAvgPH * 100.0) / 100.0;
-  doc["milking_duration_sec"] = sessionDurationSec;
-  doc["samples_count"]        = validSamplesCount;
-  doc["mastitis_indication"]  = finalIndication;
-  doc["battery_pct"]          = 92; // Can connect a voltage divider on 18650 cell if desired
-
-  String jsonString;
-  serializeJson(doc, jsonString);
-
-  Serial.println(F("[NET] Transmitting payload to gateway:"));
-  Serial.println(jsonString);
-
-  HTTPClient http;
-  http.begin(GATEWAY_URL);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(5000);
-
-  int httpCode = http.POST(jsonString);
-  bool success = false;
-
-  if (httpCode > 0) {
-    Serial.printf("[NET] Gateway Response Code: %d\n", httpCode);
-    if (httpCode == HTTP_CODE_OK || httpCode == 201) {
-      String response = http.getString();
-      Serial.println(F("[NET] Gateway Response: ") + response);
-      success = true;
-    }
-  } else {
-    Serial.printf("[NET] HTTP POST failed, error: %s\n", http.errorToString(httpCode).c_str());
-  }
-
-  http.end();
-  
-  // Power down Wi-Fi immediately to maximize battery life and eliminate ADC interference
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
-  Serial.println(F("[NET] Wi-Fi powered down (Power-saving mode active)"));
-
-  return success;
 }
 
 // =====================================================================================
@@ -307,10 +232,9 @@ void setup() {
   delay(500);
 
   Serial.println(F("\n======================================================="));
-  Serial.println(F("🐄 LactoGuard / DhenuRakshak — Smart Bucket Handheld Meter"));
+  Serial.println(F("🐄 LactoGuard — Handheld Bucket Meter (ESP-NOW Mode)"));
   Serial.println(F("======================================================="));
 
-  // GPIO Mode Config
   pinMode(PIN_BTN_START, INPUT_PULLUP);
   pinMode(PIN_BTN_SEND,  INPUT_PULLUP);
   pinMode(PIN_BUZZER,    OUTPUT);
@@ -321,79 +245,76 @@ void setup() {
   digitalWrite(PIN_LED_GREEN, LOW);
   digitalWrite(PIN_LED_BLUE, LOW);
 
-  // ADC Attenuation (0 - 3.3V range)
-  analogSetPinAttenuation(PIN_EC_ADC, ADC_11db);
-  analogSetPinAttenuation(PIN_PH_ADC, ADC_11db);
+  // Initialize ESP-NOW
+  initEspNow();
 
-  // Initialize SPI for MFRC522 RFID
+  // Try initializing physical RFID if wired
   SPI.begin();
   mfrc522.PCD_Init();
-  delay(50);
-  mfrc522.PCD_DumpVersionToSerial();
+  byte v = mfrc522.PCD_ReadRegister(mfrc522.VersionReg);
+  if (v == 0x91 || v == 0x92) {
+    rfidHardwareAvailable = true;
+    Serial.printf("[RFID] MFRC522 detected (v=0x%02X)!\n", v);
+  } else {
+    rfidHardwareAvailable = false;
+    Serial.println(F("[RFID] MFRC522 not detected. Auto-simulation fallback enabled!"));
+  }
 
-  // Keep Wi-Fi off by default during sampling to save battery & prevent ADC noise
-  WiFi.mode(WIFI_OFF);
+#if SIMULATE_SENSORS
+  Serial.println(F("[SIMULATION] ✅ SENSOR SIMULATION ACTIVE:"));
+  Serial.println(F("             Generating realistic milk EC (4.5–5.1 mS/cm) & pH (6.55–6.68)."));
+#else
+  Serial.println(F("[SENSORS] 🔌 Reading PHYSICAL analog probes on GPIO 34 (EC) and 35 (pH)."));
+#endif
 
-  // Power-on beep
-  beepShort(2);
-  Serial.println(F("[READY] Place meter near Cow Ear Tag to identify cow..."));
+  beep(2, 60, 50);
+  Serial.println(F("\n[READY] Standby: Tap Ear Tag OR press START to begin milking session."));
 }
 
 // =====================================================================================
-//  MAIN LOOP (STATE MACHINE)
+//  MAIN STATE MACHINE
 // =====================================================================================
 void loop() {
   unsigned long currentMillis = millis();
 
   // -----------------------------------------------------------------------------------
-  // [STATE 0] STANDBY: Awaiting RFID Ear Tag Tap
+  // [STATE 0] STANDBY: Awaiting Cow Ear Tag Scan
   // -----------------------------------------------------------------------------------
   if (currentState == STATE_STANDBY_RFID) {
     digitalWrite(PIN_LED_BLUE, LOW);
 
     // Heartbeat blink on Green LED
-    if (currentMillis - lastLedBlinkTime > 800) {
+    if (currentMillis - lastLedBlinkTime > 700) {
       lastLedBlinkTime = currentMillis;
       ledState = !ledState;
       digitalWrite(PIN_LED_GREEN, ledState);
     }
 
-    String scannedUid = "";
-    if (checkRfidEarTag(scannedUid)) {
-      currentRfidTag = scannedUid;
-      Serial.print(F("\n>>> [RFID DETECTED] Cow Ear Tag: "));
-      Serial.println(currentRfidTag);
+    String scannedTag = "";
+    bool tagFound = checkRfidEarTag(scannedTag);
 
-      // Audio confirmation: 1 clean beep
-      beepShort(1);
+    // If tag physically scanned:
+    if (tagFound) {
+      currentRfidTag = scannedTag;
+      Serial.printf("\n>>> [RFID SCANNED] Cow Tag: %s\n", currentRfidTag.c_str());
+      beep(1, 120, 0);
       digitalWrite(PIN_LED_GREEN, HIGH);
-
-      // Reset milking session accumulators
-      ecAccumulator = 0;
-      phAccumulator = 0;
-      validSamplesCount = 0;
-
       currentState = STATE_READY_TO_MILK;
-      Serial.println(F("[STATUS] Clip meter to bucket wall and press START button to begin."));
     }
-  }
 
-  // -----------------------------------------------------------------------------------
-  // [STATE 1] READY TO MILK: Ear Tag locked, waiting for START button press
-  // -----------------------------------------------------------------------------------
-  else if (currentState == STATE_READY_TO_MILK) {
-    // Solid Green LED indicates tag is locked
-    digitalWrite(PIN_LED_GREEN, HIGH);
-
-    // Check START Button (Active LOW)
+    // FALLBACK / SHORTCUT: If RFID not yet scanned, pressing START auto-assigns simulated RFID!
     if (digitalRead(PIN_BTN_START) == LOW) {
       if (currentMillis - lastDebounceStart > DEBOUNCE_DELAY_MS) {
         lastDebounceStart = currentMillis;
-
-        Serial.println(F("\n>>> [START PRESSED] Milking session started!"));
-        beepShort(2);
+        currentRfidTag = DEFAULT_SIMULATED_RFID;
+        Serial.printf("\n>>> [START PRESSED] Auto-assigned RFID: %s\n", currentRfidTag.c_str());
+        beep(2, 80, 50);
 
         sessionStartTime = millis();
+        ecAccumulator = 0;
+        phAccumulator = 0;
+        validSamplesCount = 0;
+
         currentState = STATE_MILKING_ACTIVE;
         digitalWrite(PIN_LED_GREEN, LOW);
       }
@@ -401,7 +322,30 @@ void loop() {
   }
 
   // -----------------------------------------------------------------------------------
-  // [STATE 2] MILKING ACTIVE: Continuously sampling EC & pH in milk bucket
+  // [STATE 1] READY TO MILK: Tag locked, waiting for START button press
+  // -----------------------------------------------------------------------------------
+  else if (currentState == STATE_READY_TO_MILK) {
+    digitalWrite(PIN_LED_GREEN, HIGH);
+
+    if (digitalRead(PIN_BTN_START) == LOW) {
+      if (currentMillis - lastDebounceStart > DEBOUNCE_DELAY_MS) {
+        lastDebounceStart = currentMillis;
+        Serial.println(F("\n>>> [START PRESSED] Milking session started in bucket!"));
+        beep(2, 80, 50);
+
+        sessionStartTime = millis();
+        ecAccumulator = 0;
+        phAccumulator = 0;
+        validSamplesCount = 0;
+
+        currentState = STATE_MILKING_ACTIVE;
+        digitalWrite(PIN_LED_GREEN, LOW);
+      }
+    }
+  }
+
+  // -----------------------------------------------------------------------------------
+  // [STATE 2] MILKING ACTIVE: Sampling Milk EC & pH
   // -----------------------------------------------------------------------------------
   else if (currentState == STATE_MILKING_ACTIVE) {
     // Pulse Blue LED during milking
@@ -411,60 +355,55 @@ void loop() {
       digitalWrite(PIN_LED_BLUE, ledState);
     }
 
-    // Sample sensors every 500ms
+    // Sample every 500ms
     static unsigned long lastSampleTime = 0;
     if (currentMillis - lastSampleTime >= 500) {
       lastSampleTime = currentMillis;
 
-      float sampleEC = measureMilkEC();
-      float samplePH = measureMilkPH();
+      float sampleEC = getSimulatedOrRealEC();
+      float samplePH = getSimulatedOrRealPH();
 
-      // Filter out dry-air readings (probes not yet submerged in milk)
-      // When submerged in milk, EC is typically > 2.0 mS/cm
-      if (sampleEC > 1.5f && samplePH > 4.5f) {
-        ecAccumulator += sampleEC;
-        phAccumulator += samplePH;
-        validSamplesCount++;
+      ecAccumulator += sampleEC;
+      phAccumulator += samplePH;
+      validSamplesCount++;
 
-        Serial.printf("[MILKING] t=%lus | EC: %.2f mS/cm | pH: %.2f | Samples: %lu\n",
-                      (currentMillis - sessionStartTime) / 1000, sampleEC, samplePH, validSamplesCount);
-      } else {
-        Serial.println(F("[PROBES] Awaiting milk contact (submersion in bucket)..."));
-      }
+      Serial.printf("[MILKING] t=%02lus | Milk EC: %.2f mS/cm | pH: %.2f | Samples: %lu\n",
+                    (currentMillis - sessionStartTime) / 1000, sampleEC, samplePH, validSamplesCount);
     }
 
-    // Check SEND Button (Farmer finishes milking and wants to send)
+    // Check SEND Button (Farmer finishes milking)
     if (digitalRead(PIN_BTN_SEND) == LOW) {
       if (currentMillis - lastDebounceSend > DEBOUNCE_DELAY_MS) {
         lastDebounceSend = currentMillis;
 
         sessionDurationSec = (millis() - sessionStartTime) / 1000;
-        Serial.println(F("\n>>> [SEND PRESSED] Milking finished!"));
-        beepShort(1);
+        if (sessionDurationSec < 1) sessionDurationSec = 1;
 
-        // Compute Averages
+        Serial.println(F("\n>>> [SEND PRESSED] Milking finished! Packing data..."));
+        beep(1, 100, 0);
+
         if (validSamplesCount > 0) {
           finalAvgEC = ecAccumulator / validSamplesCount;
           finalAvgPH = phAccumulator / validSamplesCount;
         } else {
-          // Fallback if sensor was dry throughout
-          finalAvgEC = 4.8f;
-          finalAvgPH = 6.65f;
+          finalAvgEC = 4.82f;
+          finalAvgPH = 6.64f;
         }
 
-        // On-device Mastitis Risk Classification
-        if (finalAvgEC >= EC_CLINICAL_THRESHOLD || finalAvgPH >= PH_CLINICAL_THRESHOLD) {
+        // Mastitis screening
+        if (finalAvgEC >= 6.5f || finalAvgPH >= 6.95f) {
           finalIndication = "CLINICAL_ALERT";
-        } else if (finalAvgEC >= EC_SUBCLINICAL_THRESHOLD || finalAvgPH >= PH_SUBCLINICAL_THRESHOLD) {
+        } else if (finalAvgEC >= 5.7f || finalAvgPH >= 6.80f) {
           finalIndication = "SUBCLINICAL_WARNING";
         } else {
           finalIndication = "HEALTHY_NORMAL";
         }
 
-        Serial.printf("=== MILKING SUMMARY for %s ===\n", currentRfidTag.c_str());
-        Serial.printf("Duration: %lu sec | Avg EC: %.2f mS/cm | Avg pH: %.2f\n",
-                      sessionDurationSec, finalAvgEC, finalAvgPH);
-        Serial.printf("Diagnosis: %s\n", finalIndication.c_str());
+        Serial.println(F("-------------------------------------------------------"));
+        Serial.printf("Cow RFID: %s | Duration: %lu sec\n", currentRfidTag.c_str(), sessionDurationSec);
+        Serial.printf("Average EC: %.2f mS/cm | Average pH: %.2f | Result: %s\n",
+                      finalAvgEC, finalAvgPH, finalIndication.c_str());
+        Serial.println(F("-------------------------------------------------------"));
 
         currentState = STATE_TRANSMITTING;
       }
@@ -472,29 +411,41 @@ void loop() {
   }
 
   // -----------------------------------------------------------------------------------
-  // [STATE 4] TRANSMITTING: Send data to Gateway over Wi-Fi
+  // [STATE 3] TRANSMITTING: Send via ESP-NOW to Central Gateway
   // -----------------------------------------------------------------------------------
   else if (currentState == STATE_TRANSMITTING) {
-    bool ok = sendMilkingDataToGateway();
+    digitalWrite(PIN_LED_BLUE, HIGH);
 
-    if (ok) {
-      Serial.println(F("[SUCCESS] Milking data saved to Farm Gateway & Cloud DB!"));
-      // 2 Happy confirmation beeps
-      beepLong(2);
-      digitalWrite(PIN_LED_GREEN, HIGH);
-      digitalWrite(PIN_LED_BLUE, LOW);
-      delay(1500);
-    } else {
-      Serial.println(F("[FAILED] Telemetry upload failed. Check Gateway power."));
-      beepError();
-    }
+    // Fill Outgoing ESP-NOW Packet
+    memset(&outgoingPacket, 0, sizeof(outgoingPacket));
+    strncpy(outgoingPacket.device_type, "BUCKET_METER", sizeof(outgoingPacket.device_type) - 1);
+    strncpy(outgoingPacket.node_id, DEVICE_NODE_ID, sizeof(outgoingPacket.node_id) - 1);
+    strncpy(outgoingPacket.rfid_tag, currentRfidTag.c_str(), sizeof(outgoingPacket.rfid_tag) - 1);
+    
+    String cowId = "COW-" + currentRfidTag.substring(0, min((unsigned int)currentRfidTag.length(), 4U));
+    strncpy(outgoingPacket.cattle_id, cowId.c_str(), sizeof(outgoingPacket.cattle_id) - 1);
 
-    // Reset back to Standby for the next cow
+    outgoingPacket.milk_ec_ms_cm = finalAvgEC;
+    outgoingPacket.milk_ph = finalAvgPH;
+    outgoingPacket.milking_duration_sec = sessionDurationSec;
+    outgoingPacket.samples_count = validSamplesCount;
+    strncpy(outgoingPacket.mastitis_indication, finalIndication.c_str(), sizeof(outgoingPacket.mastitis_indication) - 1);
+    outgoingPacket.battery_pct = 95;
+
+    // Send packet via ESP-NOW channel hopping
+    broadcastMilkingPacket(outgoingPacket);
+
+    // Audio confirmation: 2 victory beeps
+    beep(2, 200, 100);
+    digitalWrite(PIN_LED_GREEN, HIGH);
+    digitalWrite(PIN_LED_BLUE, LOW);
+    delay(1000);
+
+    // Reset back to Standby
     currentRfidTag = "";
     digitalWrite(PIN_LED_GREEN, LOW);
-    digitalWrite(PIN_LED_BLUE, LOW);
     currentState = STATE_STANDBY_RFID;
-    Serial.println(F("\n[READY] Meter ready for next cow scan."));
+    Serial.println(F("\n[READY] Meter returned to standby. Ready for next cow!"));
   }
 
   delay(20);
