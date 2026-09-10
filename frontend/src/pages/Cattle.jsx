@@ -1,4 +1,5 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import useCattleStore from '../store/cattleStore';
 
 export default function Cattle() {
@@ -87,6 +88,7 @@ export default function Cattle() {
               <th className="py-3 px-4">Milk Yield</th>
               <th className="py-3 px-4">24h Rumination</th>
               <th className="py-3 px-4">Health Alert</th>
+              <th className="py-3 px-4 text-right">Medical History</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -120,6 +122,15 @@ export default function Cattle() {
                       HEALTHY
                     </span>
                   )}
+                </td>
+                <td className="py-3 px-4 text-right">
+                  <Link
+                    to={`/cattle/${cow.id}`}
+                    className="text-[#1e3a5f] hover:underline font-bold text-[11px] inline-flex items-center gap-1"
+                  >
+                    <span>Lab Records</span>
+                    <span>→</span>
+                  </Link>
                 </td>
               </tr>
             ))}

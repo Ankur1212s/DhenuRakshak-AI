@@ -1,362 +1,342 @@
+﻿import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
-import {
-  ArrowLeft,
-  Trash2,
-  Stethoscope,
-  Droplets,
-  Calendar,
-  Activity,
-  Thermometer,
-  ShieldCheck,
-  AlertTriangle,
-  FileText,
-  Clock,
-  ChevronRight,
-} from 'lucide-react';
-import toast from 'react-hot-toast';
 import useCattleStore from '../store/cattleStore';
-import RiskBadge from '../components/RiskBadge';
-import { useCowName } from '../utils/cowNames';
-
-const MOCK_RISK_TREND = [
-  { day: 'Mon', risk: 18, milk: 14.5, scc: 160 },
-  { day: 'Tue', risk: 22, milk: 14.2, scc: 180 },
-  { day: 'Wed', risk: 35, milk: 13.6, scc: 240 },
-  { day: 'Thu', risk: 58, milk: 11.2, scc: 390 },
-  { day: 'Fri', risk: 74, milk: 9.8, scc: 520 },
-  { day: 'Sat', risk: 86, milk: 8.4, scc: 680 },
-  { day: 'Sun', risk: 89, milk: 8.0, scc: 720 },
-];
-
-const MOCK_HISTORY = [
-  {
-    date: '2026-09-02',
-    risk: 'HIGH',
-    confidence: 89,
-    milk: 8.0,
-    temp: 40.1,
-    scc: 720000,
-    diagnosis: 'Acute subclinical mastitis identified in Right Hind quarter. Udder hardness noted.',
-  },
-  {
-    date: '2026-08-30',
-    risk: 'MEDIUM',
-    confidence: 62,
-    milk: 11.5,
-    temp: 39.4,
-    scc: 390000,
-    diagnosis: 'Mild yield drop observed post-evening milking. Post-dip application advised.',
-  },
-  {
-    date: '2026-08-25',
-    risk: 'LOW',
-    confidence: 15,
-    milk: 14.2,
-    temp: 38.8,
-    scc: 180000,
-    diagnosis: 'Routine health screening passed within normal clinical parameters.',
-  },
-];
+import toast from 'react-hot-toast';
 
 export default function CattleDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { t } = useTranslation();
-  const { cattle, removeCattle } = useCattleStore();
-  const getCowName = useCowName();
+  const { cattle } = useCattleStore();
 
   const cow = cattle.find((c) => c.id === id);
 
+  // Health records & lab reports state stored in memory / local state
+  const [records, setRecords] = useState([
+    {
+      id: 1,
+      date: '08 Sep 2026',
+      type: 'Bacteriology & Culture',
+      doctor: 'Dr. V. Sharma (B.V.Sc)',
+      scc: '140,000 cells/mL',
+      findings: 'Negative for Streptococcus agalactiae. Normal milk microbiota.',
+      action: 'Routine pre-dip and post-dip milking hygiene.',
+      status: 'NORMAL',
+    },
+    {
+      id: 2,
+      date: '25 Aug 2026',
+      type: 'California Mastitis Test (CMT)',
+      doctor: 'Dr. V. Sharma (B.V.Sc)',
+      scc: '280,000 cells/mL',
+      findings: 'Trace precipitation observed in Right Hind quarter. 7-14 day subclinical alert.',
+      action: 'Applied ICAR Aloe vera + Turmeric + Lime herbal paste for 5 days. Full recovery.',
+      status: 'RESOLVED',
+    },
+  ]);
+
+  // Form modal state for adding new health/lab record
+  const [showModal, setShowModal] = useState(false);
+  const [newRecord, setNewRecord] = useState({
+    date: new Date().toISOString().split('T')[0],
+    type: 'Somatic Cell Count (SCC) Lab Slip',
+    doctor: 'Dr. V. Sharma',
+    scc: '180,000',
+    findings: '',
+    action: '',
+    status: 'NORMAL',
+  });
+
   if (!cow) {
     return (
-      <div className="max-w-xl mx-auto px-4 pt-16 pb-24 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-4">
-          <ShieldCheck size={28} />
-        </div>
-        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-          Cattle Record Not Found
-        </h2>
-        <p className="text-xs text-slate-500 mt-1">
-          The requested cattle identifier does not exist in your registered herd database.
-        </p>
-        <button
-          onClick={() => navigate('/cattle')}
-          className="mt-5 btn-primary text-xs py-2 px-4 inline-flex"
-        >
-          ← Return to Herd Directory
+      <div className="text-center py-12 space-y-3 font-sans">
+        <h2 className="text-lg font-bold text-slate-800">Cattle Record Not Found</h2>
+        <button onClick={() => navigate('/cattle')} className="text-xs text-[#1e3a5f] font-bold hover:underline">
+          ← Return to Cattle Registry
         </button>
       </div>
     );
   }
 
-  const isHigh = cow.riskLevel === 'HIGH';
-  const isMed = cow.riskLevel === 'MEDIUM';
-
-  const handleDelete = () => {
-    if (window.confirm(`Remove ${getCowName(cow.name)} (${cow.tag}) from herd registry?`)) {
-      removeCattle(cow.id);
-      toast.success(`${getCowName(cow.name)} record deleted`);
-      navigate('/cattle');
+  const handleAddRecord = (e) => {
+    e.preventDefault();
+    if (!newRecord.findings) {
+      toast.error('Please enter diagnosis findings');
+      return;
     }
+
+    const created = {
+      ...newRecord,
+      id: Date.now(),
+      scc: newRecord.scc + ' cells/mL',
+    };
+
+    setRecords([created, ...records]);
+    toast.success(`Health record added for ${cow.name}`);
+    setShowModal(false);
+    setNewRecord({
+      date: new Date().toISOString().split('T')[0],
+      type: 'Somatic Cell Count (SCC) Lab Slip',
+      doctor: 'Dr. V. Sharma',
+      scc: '180,000',
+      findings: '',
+      action: '',
+      status: 'NORMAL',
+    });
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-24 lg:pb-12">
-      {/* Top Navigation & Action Header */}
-      <div className="flex items-center justify-between mb-5">
+    <div className="max-w-4xl mx-auto space-y-6 text-slate-800 font-sans">
+      {/* Top Breadcrumb & Actions */}
+      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
         <button
-          onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
+          onClick={() => navigate('/cattle')}
+          className="text-xs text-slate-500 hover:text-slate-800 font-medium flex items-center gap-1"
         >
-          <ArrowLeft size={16} />
-          <span>Back to Herd List</span>
+          ← Back to Cattle Registry
         </button>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate('/predict')}
-            className="btn-primary text-xs py-2 px-3.5 shadow-sm"
-          >
-            <Stethoscope size={14} />
-            <span>Run AI Screening</span>
-          </button>
-          <button
-            onClick={handleDelete}
-            className="p-2 rounded-xl border border-slate-200 dark:border-[#1e3a2f] text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-            title="Delete Cattle Record"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
+        <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded font-mono font-semibold border border-slate-200">
+          HOST_ID: {cow.tag}
+        </span>
       </div>
 
-      {/* Clinical Profile Banner */}
-      <div
-        className={`rounded-2xl p-5 sm:p-6 mb-6 border shadow-sm ${
-          isHigh
-            ? 'bg-gradient-to-r from-rose-900 to-[#1f0d11] text-white border-rose-800'
-            : isMed
-            ? 'bg-gradient-to-r from-amber-900 to-[#1f160a] text-white border-amber-800'
-            : 'bg-gradient-to-r from-[#064e3b] to-[#022c22] text-white border-emerald-800'
-        }`}
-      >
+      {/* ── Cow Identity Card (IIT Institutional Style) ── */}
+      <div className="bg-white border-2 border-slate-200 rounded-lg p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm flex items-center justify-center font-bold text-2xl text-white shadow-inner">
-              {isHigh ? <AlertTriangle size={32} /> : <ShieldCheck size={32} />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-2xl font-extrabold tracking-tight">
-                  {getCowName(cow.name)}
-                </h1>
-                <span className="font-mono text-xs px-2.5 py-0.5 rounded bg-white/20 font-bold tracking-wider">
-                  {cow.tag}
-                </span>
-                <RiskBadge level={cow.riskLevel} size="lg" showPing={isHigh} />
-              </div>
-              <div className="flex items-center gap-2 text-xs text-white/80 mt-1.5 flex-wrap">
-                <span className="font-semibold">{cow.breed}</span>
-                <span>•</span>
-                <span>Age: {cow.age} yrs</span>
-                <span>•</span>
-                <span>Lactation: Cycle {cow.lactation || 1}</span>
-                <span>•</span>
-                <span>Days in Milk: {cow.daysInMilk}d</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="sm:text-right shrink-0 bg-white/10 rounded-xl p-3 border border-white/15">
-            <div className="text-[11px] text-white/70 uppercase tracking-wider font-semibold">
-              Current Milking Status
-            </div>
-            <div className="text-2xl font-mono font-bold mt-0.5">
-              {cow.milkYield} <span className="text-xs font-normal">L/day</span>
-            </div>
-            <div className="text-[10px] text-white/60 mt-0.5">Last Checked: {cow.lastChecked}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Vitals & Telemetry Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-        <div className="bg-white dark:bg-[#11221b] border border-slate-200/80 dark:border-[#1e3a2f] rounded-xl p-4 shadow-card">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-            <Thermometer size={16} className="text-rose-500" />
-            <span>Body Temperature</span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
-              {isHigh ? '40.1' : '38.6'}
-            </span>
-            <span className="text-xs text-slate-400 font-mono">°C</span>
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">
-            {isHigh ? 'Elevated (Clinical Fever)' : 'Normal physiological range'}
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-[#11221b] border border-slate-200/80 dark:border-[#1e3a2f] rounded-xl p-4 shadow-card">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-            <Droplets size={16} className="text-teal-500" />
-            <span>Somatic Cell Count</span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
-              {isHigh ? '720,000' : '180,000'}
-            </span>
-            <span className="text-xs text-slate-400 font-mono">cells/mL</span>
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">
-            {isHigh ? 'High pathogen inflammation' : 'Healthy udder baseline'}
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-[#11221b] border border-slate-200/80 dark:border-[#1e3a2f] rounded-xl p-4 shadow-card">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-            <Activity size={16} className="text-amber-500" />
-            <span>Electrical Conductivity</span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
-              {isHigh ? '6.8' : '4.8'}
-            </span>
-            <span className="text-xs text-slate-400 font-mono">mS/cm</span>
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">
-            {isHigh ? 'Ion leak in RH quarter' : 'Balanced milk osmolarity'}
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-[#11221b] border border-slate-200/80 dark:border-[#1e3a2f] rounded-xl p-4 shadow-card">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-            <Calendar size={16} className="text-emerald-500" />
-            <span>Lactation Stage</span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
-              {cow.daysInMilk}
-            </span>
-            <span className="text-xs text-slate-400 font-mono">Days in Milk</span>
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">Mid-lactation production window</div>
-        </div>
-      </div>
-
-      {/* 7-Day Trend Chart */}
-      <div className="bg-white dark:bg-[#11221b] rounded-xl border border-slate-200/80 dark:border-[#1e3a2f] p-5 shadow-card mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-              7-Day Milk Yield & Mastitis Risk Trajectory
+            <div className="flex items-center space-x-3">
+              <h1 className="text-2xl font-serif font-bold text-[#1e3a5f]">{cow.name}</h1>
+              <span className="text-xs bg-[#1e3a5f] text-white font-mono font-bold px-2 py-0.5 rounded">
+                Tag #{cow.tag}
+              </span>
+              <span
+                className={`text-xs font-bold px-2.5 py-0.5 rounded ${
+                  cow.riskLevel === 'HIGH'
+                    ? 'bg-red-100 text-red-800'
+                    : cow.riskLevel === 'MEDIUM'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-emerald-100 text-emerald-800'
+                }`}
+              >
+                {cow.riskLevel === 'HIGH' ? 'SICK (CLINICAL)' : cow.riskLevel === 'MEDIUM' ? 'SUSPICIOUS (7-14D)' : 'HEALTHY'}
+              </span>
+            </div>
+            <div className="text-xs text-slate-500 mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+              <span>Breed: <strong className="text-slate-700">{cow.breed}</strong></span>
+              <span>•</span>
+              <span>Age: <strong className="text-slate-700">{cow.age} years</strong></span>
+              <span>•</span>
+              <span>Lactation: <strong className="text-slate-700">Cycle {cow.lactation || 2}</strong></span>
+              <span>•</span>
+              <span>Daily Milk: <strong className="text-slate-700">{cow.milkYield} L/day</strong></span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-[#1e3a5f] hover:bg-[#162a45] text-white font-bold px-4 py-2 rounded text-xs transition-colors self-start sm:self-auto shadow-sm"
+          >
+            + Add Lab / Medical Record
+          </button>
+        </div>
+      </div>
+
+      {/* ── Cow Vitals & Sensor Indicators ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div className="bg-white border border-slate-200 rounded p-3 shadow-xs">
+          <div className="text-slate-500 text-[11px] font-medium">Core Temperature</div>
+          <div className="text-xl font-bold text-[#1e3a5f] font-mono mt-1">
+            {cow.riskLevel === 'HIGH' ? '40.1' : cow.riskLevel === 'MEDIUM' ? '39.2' : '38.6'} °C
+          </div>
+          <div className="text-[10px] text-emerald-600 mt-0.5">Automated ear sensor</div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded p-3 shadow-xs">
+          <div className="text-slate-500 text-[11px] font-medium">24h Rumination</div>
+          <div className="text-xl font-bold text-[#1e3a5f] font-mono mt-1">
+            {cow.riskLevel === 'HIGH' ? '210' : cow.riskLevel === 'MEDIUM' ? '340' : '480'} mins
+          </div>
+          <div className="text-[10px] text-slate-500 mt-0.5">Cud chewing time</div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded p-3 shadow-xs">
+          <div className="text-slate-500 text-[11px] font-medium">Last Known SCC</div>
+          <div className="text-xl font-bold text-[#1e3a5f] font-mono mt-1">
+            {cow.riskLevel === 'HIGH' ? '720k' : cow.riskLevel === 'MEDIUM' ? '290k' : '140k'}
+          </div>
+          <div className="text-[10px] text-slate-500 mt-0.5">cells / mL</div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded p-3 shadow-xs">
+          <div className="text-slate-500 text-[11px] font-medium">Days In Milk (DIM)</div>
+          <div className="text-xl font-bold text-[#1e3a5f] font-mono mt-1">
+            {cow.daysInMilk || 45} days
+          </div>
+          <div className="text-[10px] text-slate-500 mt-0.5">Active lactation</div>
+        </div>
+      </div>
+
+      {/* ── Health History & Veterinary Lab Records Archive ── */}
+      <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div>
+            <h2 className="text-sm font-serif font-bold text-[#1e3a5f]">
+              Permanent Veterinary Lab & Medical History Archive
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Correlation between Somatic Cell Count spikes and daily milk production loss
+            <p className="text-xs text-slate-500 mt-0.5">
+              Historical clinical reports, CMT test scores, somatic cell counts, and veterinarian remarks for {cow.name}
             </p>
           </div>
-          <div className="flex items-center gap-4 text-xs font-semibold">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-              <span className="text-slate-600 dark:text-slate-300">Daily Milk (L)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-              <span className="text-slate-600 dark:text-slate-300">Risk Index (%)</span>
-            </div>
-          </div>
+          <span className="text-xs text-slate-400 font-mono">
+            {records.length} Records Stored
+          </span>
         </div>
 
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={MOCK_RISK_TREND}>
-              <defs>
-                <linearGradient id="milkGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#059669" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#059669" stopOpacity={0.0} />
-                </linearGradient>
-                <linearGradient id="riskGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#e11d48" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#e11d48" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#ffffff',
-                  borderColor: '#e2e8f0',
-                  borderRadius: '12px',
-                  fontSize: '12px',
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="milk"
-                stroke="#059669"
-                strokeWidth={2.5}
-                fillOpacity={1}
-                fill="url(#milkGrad)"
-              />
-              <Area
-                type="monotone"
-                dataKey="risk"
-                stroke="#e11d48"
-                strokeWidth={2.5}
-                fillOpacity={1}
-                fill="url(#riskGrad)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Clinical Screening History Table */}
-      <div className="bg-white dark:bg-[#11221b] rounded-xl border border-slate-200/80 dark:border-[#1e3a2f] p-5 shadow-card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-2">
-            <FileText size={16} className="text-primary-light" />
-            <span>Historical Clinical Records & Diagnoses</span>
-          </h2>
-          <span className="text-xs text-slate-400">Authenticated Records</span>
-        </div>
-
-        <div className="space-y-3">
-          {MOCK_HISTORY.map((h, i) => (
-            <div
-              key={i}
-              className="p-4 rounded-xl border border-slate-100 dark:border-[#1e3a2f] bg-slate-50/50 dark:bg-[#0d1a15] text-xs hover:bg-white dark:hover:bg-[#152a21] transition-colors"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                    {h.date}
+        <div className="space-y-3.5 divide-y divide-slate-100">
+          {records.map((r) => (
+            <div key={r.id} className="pt-3.5 first:pt-0 space-y-1.5 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                    {r.date}
                   </span>
-                  <RiskBadge level={h.risk} size="sm" />
-                  <span className="text-slate-400">AI Confidence: {h.confidence}%</span>
+                  <span className="font-bold text-[#1e3a5f]">{r.type}</span>
+                  <span className="text-slate-400">• Attending: {r.doctor}</span>
                 </div>
-                <div className="flex items-center gap-3 font-mono text-slate-500">
-                  <span>Milk: {h.milk}L</span>
-                  <span>Temp: {h.temp}°C</span>
-                  <span>SCC: {h.scc.toLocaleString()}</span>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                    r.status === 'NORMAL'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : r.status === 'RESOLVED'
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-red-100 text-red-800'
+                  }`}
+                >
+                  {r.status}
+                </span>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-1">
+                <div>
+                  <strong className="text-slate-700">Lab Findings & Pathogen Markers:</strong>{' '}
+                  <span className="text-slate-800">{r.findings}</span>
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  <span>Somatic Cell Count: <strong>{r.scc}</strong></span>
+                </div>
+                <div className="pt-1 border-t border-slate-200/60 text-slate-700">
+                  <strong className="text-slate-900">Treatment & Clinical Action Taken:</strong> {r.action}
                 </div>
               </div>
-              <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{h.diagnosis}</p>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Modal: Add Lab Record */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-lg w-full p-5 space-y-4 shadow-xl border border-slate-300 text-xs">
+            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+              <h3 className="font-bold text-sm text-[#1e3a5f]">
+                Record Medical / Lab Test for {cow.name} ({cow.tag})
+              </h3>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-700 font-bold text-base">✕</button>
+            </div>
+
+            <form onSubmit={handleAddRecord} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Test Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={newRecord.date}
+                    onChange={(e) => setNewRecord({ ...newRecord, date: e.target.value })}
+                    className="w-full border border-slate-300 rounded p-2 text-xs outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Attending Veterinarian</label>
+                  <input
+                    type="text"
+                    required
+                    value={newRecord.doctor}
+                    onChange={(e) => setNewRecord({ ...newRecord, doctor: e.target.value })}
+                    className="w-full border border-slate-300 rounded p-2 text-xs outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Medical Test Type</label>
+                  <select
+                    value={newRecord.type}
+                    onChange={(e) => setNewRecord({ ...newRecord, type: e.target.value })}
+                    className="w-full border border-slate-300 rounded p-2 text-xs outline-none bg-white"
+                  >
+                    <option value="Somatic Cell Count (SCC) Lab Slip">SCC Lab Slip</option>
+                    <option value="California Mastitis Test (CMT)">California Mastitis Test (CMT)</option>
+                    <option value="Bacteriology & Culture">Milk Bacteriology & Culture</option>
+                    <option value="Quarter Electrical Conductivity Scan">Quarter Conductivity Scan</option>
+                    <option value="Routine Veterinary Health Inspection">Routine Health Inspection</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">SCC (cells/mL)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 180,000"
+                    value={newRecord.scc}
+                    onChange={(e) => setNewRecord({ ...newRecord, scc: e.target.value })}
+                    className="w-full border border-slate-300 rounded p-2 text-xs outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Diagnosis & Laboratory Findings</label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="e.g. Trace precipitation in Right Hind quarter, mild SCC elevation..."
+                  value={newRecord.findings}
+                  onChange={(e) => setNewRecord({ ...newRecord, findings: e.target.value })}
+                  className="w-full border border-slate-300 rounded p-2 text-xs outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Prescribed Action / Treatment</label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="e.g. Applied ICAR phytotherapy paste, isolated milk for 3 days..."
+                  value={newRecord.action}
+                  onChange={(e) => setNewRecord({ ...newRecord, action: e.target.value })}
+                  className="w-full border border-slate-300 rounded p-2 text-xs outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-3 py-1.5 border border-slate-300 rounded text-slate-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-[#1e3a5f] hover:bg-[#162a45] text-white font-bold rounded"
+                >
+                  Save Record to Cow Archive
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
