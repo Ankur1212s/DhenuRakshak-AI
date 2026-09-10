@@ -1,7 +1,7 @@
 // Netlify Serverless Function: /api/telemetry (ESM with MongoDB Atlas persistence)
 import { MongoClient } from "mongodb";
 
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://antigravity:Ankur1212%24@cluster0.ohbtqbk.mongodb.net/lactoguard?retryWrites=true&w=majority&appName=Cluster0";
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://antigravity:Ankur1212s@cluster0.ohbtqbk.mongodb.net/lactoguard?retryWrites=true&w=majority&appName=Cluster0";
 const DB_NAME = "lactoguard";
 const COLLECTION_NAME = "telemetry_logs";
 
