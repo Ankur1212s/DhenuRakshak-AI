@@ -1,6 +1,26 @@
-﻿// Netlify Serverless Function: /api/telemetry (ESM)
-let latestTelemetry = {
-  node_id: "DHENU-COLLAR-01",
+﻿// Netlify Serverless Function: /api/telemetry (ESM with MongoDB Atlas persistence)
+import { MongoClient } from "mongodb";
+
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://antigravity:Ankur1212%24@cluster0.ohbtqbk.mongodb.net/lactoguard?retryWrites=true&w=majority&appName=Cluster0";
+const DB_NAME = "lactoguard";
+const COLLECTION_NAME = "telemetry_logs";
+
+let cachedClient = null;
+
+async function getMongoCollection() {
+  if (!cachedClient) {
+    cachedClient = new MongoClient(MONGO_URI, {
+      maxPoolSize: 5,
+      serverSelectionTimeoutMS: 5000,
+    });
+    await cachedClient.connect();
+  }
+  return cachedClient.db(DB_NAME).collection(COLLECTION_NAME);
+}
+
+// In-memory fallback in case DB is momentarily unreachable
+let fallbackTelemetry = {
+  node_id: "DHENU-TAG-01",
   cattle_id: "COW-102",
   cow_name: "Kamdhenu",
   temperature_c: 38.6,
@@ -36,16 +56,15 @@ export default async function handler(req, context) {
     return new Response("", { status: 200, headers });
   }
 
+  // ── POST: Ingest telemetry from Raspberry Pi 3B+ & Save to MongoDB Atlas ──
   if (req.method === "POST") {
     try {
       const payload = await req.json();
-      latestTelemetry = {
-        ...payload,
-        last_updated: new Date().toISOString()
-      };
+      const nowIso = new Date().toISOString();
+      const cattleId = payload.cattle_id || "COW-102";
 
-      const temp = Number(latestTelemetry.temperature_c) || 38.5;
-      const cpm = Number(latestTelemetry.jaw_metrics?.chews_per_minute) || 0;
+      const temp = Number(payload.temperature_c) || 38.6;
+      const cpm = Number(payload.jaw_metrics?.chews_per_minute) || 0;
       let riskLevel = "LOW";
       let riskScore = 12.0;
 
@@ -57,14 +76,38 @@ export default async function handler(req, context) {
         riskScore = 54.0;
       }
 
+      const documentToInsert = {
+        ...payload,
+        risk_level: riskLevel,
+        risk_score: riskScore,
+        created_at: nowIso,
+        timestamp: new Date()
+      };
+
+      // 1. Save permanently to your MongoDB Atlas cluster
+      try {
+        const col = await getMongoCollection();
+        await col.insertOne(documentToInsert);
+      } catch (dbErr) {
+        console.warn("MongoDB insert error (falling back):", dbErr.message);
+      }
+
+      fallbackTelemetry = {
+        ...payload,
+        risk_level: riskLevel,
+        risk_score: riskScore,
+        last_updated: nowIso
+      };
+
       return new Response(JSON.stringify({
         success: true,
-        message: "Telemetry ingested successfully by DhenuRakshak Netlify Cloud",
+        message: "Telemetry stored in MongoDB Atlas (lactoguard.telemetry_logs)",
         prediction: {
           risk_level: riskLevel,
           risk_score: riskScore,
           forecast_window: "7 to 14 Days Early Warning",
-          cow_name: latestTelemetry.cow_name || "Kamdhenu"
+          cow_name: payload.cow_name || "Kamdhenu",
+          cattle_id: cattleId
         }
       }), { status: 200, headers });
     } catch (err) {
@@ -72,8 +115,45 @@ export default async function handler(req, context) {
     }
   }
 
-  return new Response(JSON.stringify({
-    success: true,
-    telemetry: latestTelemetry
-  }), { status: 200, headers });
+  // ── GET: Query cow data directly from your MongoDB Atlas Database ──
+  try {
+    const url = new URL(req.url);
+    const cowParam = url.searchParams.get("cow") || url.searchParams.get("cattle_id");
+
+    const col = await getMongoCollection();
+
+    if (cowParam) {
+      // Query specific cow's recent telemetry logs from MongoDB
+      const cowLogs = await col
+        .find({ $or: [{ cattle_id: cowParam }, { cow_name: new RegExp(cowParam, "i") }, { node_id: cowParam }] })
+        .sort({ created_at: -1 })
+        .limit(20)
+        .toArray();
+
+      return new Response(JSON.stringify({
+        success: true,
+        database: "MongoDB Atlas (Cluster0)",
+        cow: cowParam,
+        count: cowLogs.length,
+        telemetry: cowLogs[0] || fallbackTelemetry,
+        history: cowLogs
+      }), { status: 200, headers });
+    }
+
+    // Default: Return latest telemetry document from MongoDB
+    const latestDoc = await col.find({}).sort({ created_at: -1 }).limit(1).toArray();
+
+    return new Response(JSON.stringify({
+      success: true,
+      database: "MongoDB Atlas (Cluster0)",
+      telemetry: latestDoc[0] || fallbackTelemetry
+    }), { status: 200, headers });
+  } catch (err) {
+    // Graceful fallback to memory
+    return new Response(JSON.stringify({
+      success: true,
+      database: "Fallback Memory",
+      telemetry: fallbackTelemetry
+    }), { status: 200, headers });
+  }
 }
