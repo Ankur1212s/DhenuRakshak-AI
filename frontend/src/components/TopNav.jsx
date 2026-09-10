@@ -3,69 +3,81 @@ import useCattleStore from "../store/cattleStore";
 
 export default function TopNav() {
   const { cattle } = useCattleStore();
-  const suspiciousCount = cattle.filter((c) => c.riskLevel === "MEDIUM").length;
-  const sickCount = cattle.filter((c) => c.riskLevel === "HIGH").length;
+  const alertCount = cattle.filter((c) => c.riskLevel === "HIGH" || c.riskLevel === "MEDIUM").length;
 
   return (
-    <header className="bg-[#1e293b] text-white sticky top-0 z-50 shadow-md">
-      {/* Top Header Bar */}
-      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-        {/* Brand & Farm Name */}
+    <header className="bg-white border-b-2 border-[#800000] sticky top-0 z-50 shadow-sm font-sans">
+      {/* ── Top University / Institutional Utility Strip ── */}
+      <div className="bg-[#1e3a5f] text-white text-[11px] py-1 px-4">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            <span>INDIAN DAIRY HEALTH INITIATIVE</span>
+            <span className="text-slate-400">|</span>
+            <span className="text-slate-200">ICAR-NDRI VALIDATED PROTOCOLS</span>
+          </div>
+          <div className="flex items-center space-x-4">
+            <span className="text-slate-300">Helpline: 1962 (Toll Free)</span>
+            <span className="text-slate-400">|</span>
+            <span className="text-emerald-300 font-medium">Node Uplink: Active</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── IIT-Style Main Brand Banner ── */}
+      <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 bg-white">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold text-sm shadow">
-            CM
+          {/* Circular Insignia Emblem */}
+          <div className="w-11 h-11 rounded-full bg-[#1e3a5f] border-2 border-[#800000] text-amber-300 flex items-center justify-center font-serif font-black text-xl shadow-sm">
+            LG
           </div>
           <div>
-            <div className="font-bold text-base leading-tight tracking-tight flex items-center gap-1.5">
-              <span>DhenuRakshak</span>
-              <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-normal">
-                Ear Sensor Live
+            <div className="flex items-center space-x-2">
+              <h1 className="font-serif font-bold text-xl text-[#1e3a5f] tracking-tight leading-none">
+                LactoGuard
+              </h1>
+              <span className="text-[11px] font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-300 font-semibold">
+                AI 3.2
               </span>
             </div>
-            <div className="text-[11px] text-slate-400">Surabhi Dairy Farm • Herd Health Monitor</div>
+            <p className="text-[11px] text-slate-600 font-medium tracking-wide mt-0.5">
+              Precision Bovine Health Intelligence & Mastitis Early Forecasting
+            </p>
           </div>
         </div>
 
-        {/* CowManager Alert Tally Indicators */}
-        <div className="flex items-center space-x-2 text-xs font-semibold">
-          {sickCount > 0 && (
-            <span className="flex items-center gap-1 bg-red-600/90 text-white px-2.5 py-1 rounded shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              <span>{sickCount} SICK</span>
+        {/* Status Pills */}
+        <div className="flex items-center space-x-2 text-xs">
+          {alertCount > 0 ? (
+            <span className="bg-[#800000] text-white font-bold px-2.5 py-1 rounded text-xs shadow-sm">
+              {alertCount} Active Alerts
             </span>
-          )}
-          {suspiciousCount > 0 && (
-            <span className="flex items-center gap-1 bg-amber-500 text-slate-950 px-2.5 py-1 rounded shadow-sm font-bold">
-              <span>{suspiciousCount} SUSPICIOUS</span>
-            </span>
-          )}
-          {sickCount === 0 && suspiciousCount === 0 && (
-            <span className="bg-emerald-600/80 text-white px-2.5 py-1 rounded">
-              ALL HEALTHY
+          ) : (
+            <span className="bg-emerald-700 text-white font-semibold px-2.5 py-1 rounded text-xs">
+              Herd Nominal
             </span>
           )}
         </div>
       </div>
 
-      {/* CowManager Module Navigation Bar */}
-      <div className="bg-[#0f172a] border-t border-slate-700/60 px-4">
-        <div className="max-w-7xl mx-auto flex space-x-1 overflow-x-auto text-xs">
+      {/* ── IIT-Style Navigation Bar (Navy Blue Bar with Gold/White Links) ── */}
+      <nav className="bg-[#1e3a5f] text-white">
+        <div className="max-w-7xl mx-auto px-4 flex space-x-1 overflow-x-auto text-xs font-semibold uppercase tracking-wider">
           {[
-            { to: "/dashboard", label: "Health Monitor" },
-            { to: "/cattle", label: "Cow List" },
+            { to: "/dashboard", label: "Dashboard" },
+            { to: "/cattle", label: "Cattle Registry" },
             { to: "/predict", label: "Quick Check" },
-            { to: "/alerts", label: "Health Alerts" },
-            { to: "/analytics", label: "Nutrition & Rumination" },
-            { to: "/settings", label: "Farm Settings" },
+            { to: "/alerts", label: "Alerts" },
+            { to: "/analytics", label: "Epidemiology" },
+            { to: "/settings", label: "Configuration" },
           ].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `py-2.5 px-4 font-medium transition-colors border-b-2 whitespace-nowrap ${
+                `py-2.5 px-3.5 whitespace-nowrap transition-colors border-b-2 ${
                   isActive
-                    ? "border-amber-400 text-amber-300 bg-slate-800/60 font-bold"
-                    : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/30"
+                    ? "border-amber-400 text-amber-300 bg-[#162a45] font-bold"
+                    : "border-transparent text-slate-200 hover:text-white hover:bg-[#162a45]/60"
                 }`
               }
             >
@@ -73,7 +85,7 @@ export default function TopNav() {
             </NavLink>
           ))}
         </div>
-      </div>
+      </nav>
     </header>
   );
 }
