@@ -1,475 +1,618 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import {
-  Bell,
-  Settings,
-  Plus,
-  Stethoscope,
-  AlertTriangle,
-  PhoneCall,
-  Activity,
-  Droplets,
-  Layers,
-  Thermometer,
-  ShieldCheck,
-  Radio,
-  Wind,
-  CheckCircle2,
-  ChevronRight,
-  Sparkles,
-} from 'lucide-react';
-import useAuthStore from '../store/authStore';
-import useCattleStore from '../store/cattleStore';
-import StatCard from '../components/StatCard';
-import RiskBadge from '../components/RiskBadge';
-import CollarTelemetryCard from '../components/CollarTelemetryCard';
-import { useCowName } from '../utils/cowNames';
-
-const RECENT_CLINICAL_EVENTS = [
-  { id: 1, cow: 'Lakshmi', tag: 'GJ-002', action: 'Elevated SCC & Temp (40.1°C)', time: '1h ago', level: 'HIGH', icon: AlertTriangle },
-  { id: 2, cow: 'Parvati', tag: 'GJ-006', action: 'Right Hind Quarter EC > 6.4 mS/cm', time: '3h ago', level: 'HIGH', icon: AlertTriangle },
-  { id: 3, cow: 'Kamdhenu', tag: 'GJ-003', action: 'Subclinical Watchlist Flagged', time: '5h ago', level: 'MEDIUM', icon: Activity },
-  { id: 4, cow: 'Ganga', tag: 'GJ-001', action: 'Milking session verified healthy (14.5L)', time: '8h ago', level: 'LOW', icon: CheckCircle2 },
-  { id: 5, cow: 'Meera', tag: 'GJ-007', action: 'Yield recorded: 20.0 L/day (Peak)', time: '1d ago', level: 'LOW', icon: Droplets },
-];
-
-// 4-Quarter Udder Sample Readings for Parlor Preview
-const QUARTER_TELEMETRY = [
-  { id: 'LF', name: 'Left Front', ec: '4.8', status: 'Optimal', normal: true },
-  { id: 'RF', name: 'Right Front', ec: '5.1', status: 'Optimal', normal: true },
-  { id: 'LH', name: 'Left Hind', ec: '5.4', status: 'Watchlist', normal: false, warning: true },
-  { id: 'RH', name: 'Right Hind', ec: '6.8', status: 'High EC Spike', normal: false, danger: true },
-];
+﻿import React, { useState, useEffect } from "react";
+import { 
+  Terminal, 
+  Activity, 
+  Cpu, 
+  Database, 
+  Search, 
+  ShieldAlert, 
+  AlertTriangle, 
+  CheckCircle2, 
+  Clock, 
+  MapPin, 
+  RefreshCw, 
+  Radio, 
+  Sliders, 
+  FileText,
+  Tag,
+  Zap,
+  Power
+} from "lucide-react";
+import useCattleStore from "../store/cattleStore";
 
 export default function Dashboard() {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const { cattle } = useCattleStore();
-  const getCowName = useCowName();
+  const { cattle, updateCattle } = useCattleStore();
+  const [activeTab, setActiveTab] = useState("telemetry"); // "telemetry" | "diagnostic" | "inventory" | "syslog"
+  const [telemetry, setTelemetry] = useState(null);
+  const [lastBoutTime, setLastBoutTime] = useState("Just now");
+  const [probeLog, setProbeLog] = useState([
+    { time: "17:20:00", node: "TAG-01", cow: "Kamdhenu (COW-102)", event: "ADXL345 INT1 WAKEUP", dur: "5.2m", cpm: 54.2, temp: 38.6, status: "STORED", level: "INFO" },
+    { time: "17:14:48", node: "TAG-01", cow: "Kamdhenu (COW-102)", event: "SLEEP_DEEP_ENTER", dur: "--", cpm: "--", temp: "--", status: "12uA DORMANT", level: "SLEEP" },
+    { time: "16:45:10", node: "TAG-02", cow: "Lakshmi (COW-101)", event: "RUMINATION DEFICIT", dur: "1.8m", cpm: 32.0, temp: 39.4, status: "SUBCLINICAL FLAG", level: "WARN" },
+    { time: "16:10:05", node: "TAG-03", cow: "Ganga (COW-103)", event: "ROUTINE_BOUT_SYNC", dur: "6.1m", cpm: 58.4, temp: 38.5, status: "HEALTHY", level: "INFO" },
+    { time: "15:30:20", node: "TAG-04", cow: "Meera (COW-104)", event: "HIGH TEMPERATURE ALARM", dur: "0.5m", cpm: 18.0, temp: 40.1, status: "CRITICAL ALERT", level: "CRIT" },
+  ]);
 
-  const [greeting, setGreeting] = useState('');
-  const [now, setNow] = useState(new Date());
+  // Diagnostic Form State
+  const [selectedCowId, setSelectedCowId] = useState(cattle[0]?.id || "2");
+  const [diagForm, setDiagForm] = useState({
+    bodyTemp: "38.6",
+    cpm: "54",
+    ruminationDeficit: "0",
+    scc: "140",
+    ecRF: "4.9",
+    ecRH: "4.8",
+    swelling: "no"
+  });
+  const [diagOutput, setDiagOutput] = useState(null);
+  const [isScanning, setIsScanning] = useState(false);
 
+  // Poll live telemetry from Netlify serverless endpoint
   useEffect(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) setGreeting(t('dashboard.goodMorning'));
-    else if (hour < 17) setGreeting(t('dashboard.goodAfternoon'));
-    else setGreeting(t('dashboard.goodEvening'));
-  }, [t]);
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60000);
-    return () => clearInterval(timer);
+    const fetchTelem = async () => {
+      try {
+        const res = await fetch("/api/telemetry");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.telemetry) {
+            setTelemetry(data.telemetry);
+            setLastBoutTime(new Date().toLocaleTimeString("en-GB"));
+          }
+        }
+      } catch (e) {}
+    };
+    fetchTelem();
+    const interval = setInterval(fetchTelem, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  const totalCattle = cattle.length;
-  const atRisk = cattle.filter((c) => c.riskLevel === 'HIGH').length;
-  const watchful = cattle.filter((c) => c.riskLevel === 'MEDIUM').length;
-  const safe = cattle.filter((c) => c.riskLevel === 'LOW').length;
-  const totalMilk = cattle.reduce((sum, c) => sum + (c.milkYield || 0), 0).toFixed(1);
+  const runDiagnosticScan = () => {
+    setIsScanning(true);
+    setTimeout(() => {
+      const temp = parseFloat(diagForm.bodyTemp) || 38.6;
+      const cpm = parseFloat(diagForm.cpm) || 50;
+      const deficit = parseFloat(diagForm.ruminationDeficit) || 0;
+      const scc = parseFloat(diagForm.scc) || 150;
+      const ecRH = parseFloat(diagForm.ecRH) || 4.8;
+      const swelling = diagForm.swelling === "yes";
 
-  const pieData = [
-    { name: t('dashboard.safe'), value: safe, color: '#059669' },
-    { name: t('dashboard.watchful'), value: watchful, color: '#d97706' },
-    { name: t('dashboard.danger'), value: atRisk, color: '#e11d48' },
-  ].filter((d) => d.value > 0);
+      let score = 10;
+      let level = "LOW";
+      let window = "Normal Baseline (No Clinical Risk)";
+      let action = "Continue standard milking hygiene and scheduled 5-minute ear tag duty cycle.";
 
-  const dateStr = now.toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-  const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      if (swelling || temp >= 39.8 || ecRH >= 6.4 || scc >= 500) {
+        level = "HIGH";
+        score = 89.4;
+        window = "ACUTE CLINICAL PHASE — Immediate Vet Attention Required";
+        action = "Quarantine animal immediately. Perform CMT test & administer veterinarian prescribed intramammary therapy.";
+      } else if (deficit >= 15 || cpm < 42 || temp >= 39.2 || scc >= 250 || ecRH >= 5.6) {
+        level = "MEDIUM";
+        score = 64.8;
+        window = "7 to 14 Days Early Warning (Subclinical Onset)";
+        action = "ICAR Phytotherapy: Aloe vera (250g) + Turmeric (50g) + Lime (15g). Apply topically 3x daily. Milk infected quarter last.";
+      }
+
+      const cowObj = cattle.find(c => c.id === selectedCowId);
+      const resObj = {
+        target: cowObj?.name || "Target Host",
+        tag: cowObj?.tag || "TAG-01",
+        riskLevel: level,
+        riskScore: score,
+        window: window,
+        action: action,
+        timestamp: new Date().toISOString(),
+        metricsAudit: {
+          temp: `${temp.toFixed(1)} °C`,
+          cpm: `${cpm.toFixed(1)} CPM`,
+          ruminationDeficit: `${deficit}%`,
+          scc: `${scc}k cells/mL`,
+          maxEC: `${ecRH} mS/cm`
+        }
+      };
+
+      setDiagOutput(resObj);
+      setIsScanning(false);
+
+      // Append to syslog
+      setProbeLog(prev => [
+        {
+          time: new Date().toLocaleTimeString("en-GB"),
+          node: cowObj?.tag || "DIAG-MANUAL",
+          cow: cowObj?.name || "Host",
+          event: `MANUAL_AUDIT_${level}`,
+          dur: "1-shot",
+          cpm: cpm,
+          temp: temp,
+          status: level === "LOW" ? "HEALTHY" : level === "MEDIUM" ? "SUBCLINICAL FLAG" : "CRITICAL ALERT",
+          level: level === "LOW" ? "INFO" : level === "MEDIUM" ? "WARN" : "CRIT"
+        },
+        ...prev.slice(0, 19)
+      ]);
+    }, 450);
+  };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-24 lg:pb-12">
-      {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-primary-light">
-              {user?.farmName || 'Surabhi Dairy Farm'}
-            </span>
-            <span className="text-slate-300 dark:text-slate-700">•</span>
-            <span className="text-xs text-slate-500 font-medium">Anand, Gujarat</span>
+    <div className="bg-[#0b0f17] text-[#c9d1d9] font-mono min-h-screen p-3 sm:p-5 flex flex-col space-y-4">
+      {/* ── Console Header (Nmap / System Utility Style) ── */}
+      <header className="border border-[#30363d] bg-[#161b22] p-3 rounded-md flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div className="flex items-center space-x-3">
+          <div className="px-2 py-1 bg-[#238636] text-black font-bold text-xs rounded tracking-widest flex items-center gap-1.5">
+            <Terminal size={14} className="stroke-[3]" />
+            <span>DHENURAKSHAK-OS v3.2</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-0.5">
-            {t('dashboard.greeting')}, {user?.name?.split(' ')[0] || 'Farmer'}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            {greeting} — Real-time herd health & milking telemetry overview
-          </p>
+          <div className="hidden sm:block text-xs text-[#8b949e]">
+            Target: <span className="text-[#f0f6fc] font-bold">LIVESTOCK-SUBNET (192.168.4.0/24)</span>
+          </div>
+          <div className="hidden md:block text-xs text-[#8b949e]">
+            Protocol: <span className="text-[#58a6ff]">BLE/Wi-Fi • Deep Sleep Duty-Cycle (5m)</span>
+          </div>
         </div>
 
-        {/* Quick Action Top Right */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            onClick={() => navigate('/predict')}
-            className="btn-primary text-xs py-2.5 px-4 shadow-sm"
-          >
-            <Stethoscope size={15} />
-            <span>AI Risk Screening</span>
-          </button>
-          <button
-            onClick={() => navigate('/alerts')}
-            className="relative p-2.5 rounded-xl bg-white dark:bg-[#11221b] border border-slate-200 dark:border-[#1e3a2f] text-slate-700 dark:text-slate-200 hover:border-primary-light transition-all shadow-sm"
-            title="Clinical Alerts"
-          >
-            <Bell size={18} />
-            {atRisk > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white dark:ring-[#11221b]">
-                {atRisk}
-              </span>
-            )}
-          </button>
+        <div className="flex items-center space-x-2 text-xs">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded border border-[#30363d] bg-[#0d1117] text-[#3fb950]">
+            <span className="w-2 h-2 rounded-full bg-[#3fb950] animate-pulse" />
+            <span>GATEWAY ONLINE</span>
+          </span>
+          <span className="text-[#8b949e] border border-[#30363d] bg-[#0d1117] px-2 py-0.5 rounded">
+            EAR-TAG INT1 WAKEUP
+          </span>
         </div>
+      </header>
+
+      {/* ── System Status & Duty Cycle Bar ── */}
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-2.5 text-xs">
+        <div className="border border-[#30363d] bg-[#161b22] p-2.5 rounded">
+          <div className="text-[#8b949e] flex justify-between">
+            <span>ACTIVE EAR-TAG NODES</span>
+            <Tag size={13} className="text-[#58a6ff]" />
+          </div>
+          <div className="text-lg font-bold text-[#f0f6fc] mt-1 font-mono">
+            {cattle.length} <span className="text-xs text-[#8b949e] font-normal">NODES REGISTERED</span>
+          </div>
+          <div className="text-[10px] text-[#3fb950] mt-0.5">● 100% RETENTION RATE</div>
+        </div>
+
+        <div className="border border-[#30363d] bg-[#161b22] p-2.5 rounded">
+          <div className="text-[#8b949e] flex justify-between">
+            <span>TRANSMISSION DUTY PROFILE</span>
+            <Power size={13} className="text-[#238636]" />
+          </div>
+          <div className="text-lg font-bold text-[#f0f6fc] mt-1 font-mono">
+            5 MIN <span className="text-xs text-[#8b949e] font-normal">BURST WINDOW</span>
+          </div>
+          <div className="text-[10px] text-[#8b949e] mt-0.5">SLEEP CONSUMPTION: ~12 µA</div>
+        </div>
+
+        <div className="border border-[#30363d] bg-[#161b22] p-2.5 rounded">
+          <div className="text-[#8b949e] flex justify-between">
+            <span>EAR-TAG SENSOR FORM FACTOR</span>
+            <ShieldAlert size={13} className="text-[#d29922]" />
+          </div>
+          <div className="text-lg font-bold text-[#f0f6fc] mt-1 font-mono truncate">
+            VENTILATED PIN
+          </div>
+          <div className="text-[10px] text-[#3fb950] mt-0.5">ZERO ABRASION / ZERO FUNGUS</div>
+        </div>
+
+        <div className="border border-[#30363d] bg-[#161b22] p-2.5 rounded">
+          <div className="text-[#8b949e] flex justify-between">
+            <span>7-14D MAST-AI ENSEMBLE</span>
+            <Cpu size={13} className="text-[#a371f7]" />
+          </div>
+          <div className="text-lg font-bold text-[#3fb950] mt-1 font-mono">
+            ACTIVE <span className="text-xs text-[#8b949e] font-normal">(SUBCLINICAL)</span>
+          </div>
+          <div className="text-[10px] text-[#8b949e] mt-0.5">ICAR PROTOCOL ARMED</div>
+        </div>
+      </section>
+
+      {/* ── Console Tabs (Zenmap / Utility Style) ── */}
+      <div className="border-b border-[#30363d] flex space-x-1 text-xs">
+        {[
+          { id: "telemetry", label: "[ 1. Telemetry Log Sessions ]", icon: Radio },
+          { id: "diagnostic", label: "[ 2. 7-14 Day Diagnostic Probe ]", icon: Activity },
+          { id: "inventory", label: "[ 3. Host / Cattle Registry ]", icon: Database },
+          { id: "syslog", label: "[ 4. System Syslog & Alerts ]", icon: FileText },
+        ].map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-2 border-t border-l border-r rounded-t font-semibold flex items-center space-x-1.5 transition-colors ${
+                isActive
+                  ? "bg-[#161b22] border-[#30363d] text-[#f0f6fc]"
+                  : "bg-transparent border-transparent text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#161b22]/50"
+              }`}
+            >
+              <Icon size={13} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Barn Climate & Telemetry Alert Banner */}
-      <div className="bg-gradient-to-r from-[#064e3b] via-[#043e2f] to-[#022c22] rounded-2xl p-4 sm:p-5 mb-6 text-white shadow-md relative overflow-hidden">
-        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-48 h-48 bg-emerald-400/10 rounded-full blur-2xl pointer-events-none" />
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-11 h-11 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center text-emerald-300 shrink-0">
-              <Thermometer size={22} />
+      {/* ── Tab 1: Telemetry Log Sessions (Real-time Event Burst Monitor) ── */}
+      {activeTab === "telemetry" && (
+        <div className="space-y-4">
+          {/* Latest Live Packet Header */}
+          <div className="border border-[#30363d] bg-[#161b22] p-4 rounded-md">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#30363d] pb-2.5 mb-3 text-xs">
+              <div className="flex items-center space-x-2">
+                <span className="text-[#3fb950] font-bold">LATEST INCOMING TELEMETRY BOUT:</span>
+                <span className="text-[#f0f6fc] font-mono font-bold bg-[#21262d] px-2 py-0.5 rounded border border-[#30363d]">
+                  {telemetry?.cattle_id || "COW-102"} ({telemetry?.cow_name || "Kamdhenu"})
+                </span>
+                <span className="text-[#8b949e]">Node: {telemetry?.node_id || "DHENU-TAG-01"}</span>
+              </div>
+              <div className="text-[#8b949e]">
+                Last Burst Synced: <span className="text-[#f0f6fc]">{lastBoutTime}</span>
+              </div>
             </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="bg-[#0d1117] border border-[#30363d] p-2.5 rounded">
+                <div className="text-[#8b949e]">CORE TEMPERATURE (LM35)</div>
+                <div className="text-xl font-bold text-[#58a6ff] mt-1 font-mono">
+                  {(telemetry?.temperature_c || 38.6).toFixed(1)} °C
+                </div>
+                <div className="text-[10px] text-[#3fb950] mt-0.5">NOMINAL (38.5 - 39.2)</div>
+              </div>
+
+              <div className="bg-[#0d1117] border border-[#30363d] p-2.5 rounded">
+                <div className="text-[#8b949e]">RUMINATION RATE (ADXL345)</div>
+                <div className="text-xl font-bold text-[#3fb950] mt-1 font-mono">
+                  {(telemetry?.jaw_metrics?.chews_per_minute || 54.0).toFixed(1)} CPM
+                </div>
+                <div className="text-[10px] text-[#3fb950] mt-0.5">
+                  STATUS: {telemetry?.jaw_metrics?.rumination_state || "ACTIVE BOUT"}
+                </div>
+              </div>
+
+              <div className="bg-[#0d1117] border border-[#30363d] p-2.5 rounded">
+                <div className="text-[#8b949e]">DYNAMIC ACCELERATION</div>
+                <div className="text-xl font-bold text-[#d29922] mt-1 font-mono">
+                  {(telemetry?.jaw_metrics?.dynamic_accel_g || 0.22).toFixed(2)} g
+                </div>
+                <div className="text-[10px] text-[#8b949e] mt-0.5">DUAL-EMA DETRENDED</div>
+              </div>
+
+              <div className="bg-[#0d1117] border border-[#30363d] p-2.5 rounded">
+                <div className="text-[#8b949e]">GEOLOCATION TAG</div>
+                <div className="text-sm font-bold text-[#f0f6fc] mt-1 font-mono truncate">
+                  {telemetry?.gps?.latitude?.toFixed(4) || "22.5645"}, {telemetry?.gps?.longitude?.toFixed(4) || "72.9289"}
+                </div>
+                <div className="text-[10px] text-[#58a6ff] mt-0.5">
+                  <a href={`https://www.google.com/maps?q=${telemetry?.gps?.latitude || 22.5645},${telemetry?.gps?.longitude || 72.9289}`} target="_blank" rel="noreferrer" className="underline">
+                    PASTURE MAP ↗
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Wireshark / Nmap Style Session Probe Table */}
+          <div className="border border-[#30363d] bg-[#161b22] rounded-md overflow-hidden">
+            <div className="bg-[#21262d] px-3 py-2 border-b border-[#30363d] text-xs font-bold text-[#f0f6fc] flex justify-between items-center">
+              <span>BURST TRANSMISSION LOG (5-MINUTE INTERVAL SESSIONS)</span>
+              <span className="text-[#8b949e] font-normal">FILTER: ALL TRANSMISSIONS</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse font-mono">
+                <thead>
+                  <tr className="border-b border-[#30363d] text-[#8b949e] bg-[#161b22]">
+                    <th className="py-2 px-3">TIMESTAMP</th>
+                    <th className="py-2 px-3">SOURCE NODE</th>
+                    <th className="py-2 px-3">ANIMAL / ID</th>
+                    <th className="py-2 px-3">EVENT TRIGGER</th>
+                    <th className="py-2 px-3">BOUT DURATION</th>
+                    <th className="py-2 px-3">CPM</th>
+                    <th className="py-2 px-3">TEMP</th>
+                    <th className="py-2 px-3">AUDIT STATUS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#30363d]">
+                  {probeLog.map((log, idx) => (
+                    <tr key={idx} className="hover:bg-[#21262d]/60">
+                      <td className="py-2 px-3 text-[#8b949e]">{log.time}</td>
+                      <td className="py-2 px-3 text-[#58a6ff] font-bold">{log.node}</td>
+                      <td className="py-2 px-3 text-[#f0f6fc]">{log.cow}</td>
+                      <td className="py-2 px-3">
+                        <span className="bg-[#0d1117] px-1.5 py-0.5 rounded border border-[#30363d] text-[#c9d1d9]">
+                          {log.event}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-[#8b949e]">{log.dur}</td>
+                      <td className="py-2 px-3 text-[#3fb950] font-bold">{log.cpm}</td>
+                      <td className="py-2 px-3 text-[#f0f6fc]">{log.temp} {typeof log.temp === 'number' ? '°C' : ''}</td>
+                      <td className="py-2 px-3 font-bold">
+                        {log.level === "CRIT" ? (
+                          <span className="text-[#f85149] bg-[#f85149]/10 px-2 py-0.5 rounded border border-[#f85149]/30">CRITICAL</span>
+                        ) : log.level === "WARN" ? (
+                          <span className="text-[#d29922] bg-[#d29922]/10 px-2 py-0.5 rounded border border-[#d29922]/30">SUBCLINICAL</span>
+                        ) : log.level === "SLEEP" ? (
+                          <span className="text-[#8b949e] bg-[#8b949e]/10 px-2 py-0.5 rounded border border-[#30363d]">DORMANT</span>
+                        ) : (
+                          <span className="text-[#3fb950] bg-[#3fb950]/10 px-2 py-0.5 rounded border border-[#3fb950]/30">SYNCED</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab 2: 7-14 Day Diagnostic Probe (Console AI Evaluator) ── */}
+      {activeTab === "diagnostic" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Diagnostic Parameter Input Console */}
+          <div className="lg:col-span-6 border border-[#30363d] bg-[#161b22] p-4 rounded-md space-y-3 text-xs">
+            <div className="border-b border-[#30363d] pb-2 font-bold text-[#f0f6fc] flex items-center justify-between">
+              <span>EXECUTE DIAGNOSTIC PROBE (SIH PROBLEM STATEMENT #109)</span>
+              <Sliders size={14} className="text-[#58a6ff]" />
+            </div>
+
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-semibold text-emerald-200">
-                  Barn Microclimate Sensor #01
-                </span>
-                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
-                  THI Index: 76 (Mild Heat Stress)
-                </span>
-              </div>
-              <div className="text-sm sm:text-base font-semibold text-white/95 mt-0.5">
-                28.5°C • 62% Humidity • Optimal Milking Window: 05:00 - 08:30
-              </div>
-              <div className="text-xs text-white/75 mt-0.5">
-                Maintain cooling mist & clean drinking troughs to prevent summer somatic cell elevation.
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
-            <div className="text-right">
-              <div className="text-xs text-white/70 font-medium">{dateStr}</div>
-              <div className="text-xl font-mono font-bold">{timeStr}</div>
-            </div>
-            <div className="w-px h-8 bg-white/20 hidden sm:block" />
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 text-xs text-emerald-200 font-semibold">
-              <Radio size={13} className="text-emerald-400 animate-pulse" />
-              <span>Telemetry Online</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Real-time ESP32 Livestock Collar Card */}
-      <CollarTelemetryCard />
-
-      {/* KPI Metric Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-        <StatCard
-          icon={Layers}
-          label={t('dashboard.totalCattle')}
-          value={totalCattle}
-          unit="Head"
-          color="primary"
-          trend={1}
-          trendVal="+2 this mo"
-          onClick={() => navigate('/cattle')}
-        />
-        <StatCard
-          icon={AlertTriangle}
-          label="Clinical High Risk"
-          value={atRisk}
-          unit="Urgent"
-          color="danger"
-          subtitle="Requires immediate isolation"
-          onClick={() => navigate('/alerts')}
-        />
-        <StatCard
-          icon={Activity}
-          label="Subclinical Watchlist"
-          value={watchful}
-          unit="48h Risk"
-          color="warm"
-          subtitle="CMT check recommended"
-          onClick={() => navigate('/cattle')}
-        />
-        <StatCard
-          icon={Droplets}
-          label={t('dashboard.milkYield')}
-          value={totalMilk}
-          unit="L/day"
-          color="blue"
-          trend={1}
-          trendVal="+4.2% wk"
-          onClick={() => navigate('/analytics')}
-        />
-      </div>
-
-      {/* Main Operational Sections: 2-Column Desktop Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-        {/* Left Column (7 cols): Quick Actions + 4-Quarter Diagnostics */}
-        <div className="lg:col-span-7 space-y-6">
-          {/* Quick Action Matrix */}
-          <div className="bg-white dark:bg-[#11221b] rounded-xl border border-slate-200/80 dark:border-[#1e3a2f] p-5 shadow-card">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-2">
-                <Sparkles size={16} className="text-primary-light" />
-                <span>Diagnostic & Care Actions</span>
-              </h2>
-              <span className="text-xs text-slate-400">Quick Shortcuts</span>
+              <label className="block text-[#8b949e] mb-1">TARGET CATTLE HOST</label>
+              <select
+                value={selectedCowId}
+                onChange={e => setSelectedCowId(e.target.value)}
+                className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] focus:border-[#58a6ff] outline-none font-mono"
+              >
+                {cattle.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.tag}) — Breed: {c.breed} | Baseline Yield: {c.milkYield}L
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                {
-                  icon: Plus,
-                  label: t('dashboard.addCow'),
-                  sub: 'Register tag',
-                  color: 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/40',
-                  action: () => navigate('/cattle'),
-                },
-                {
-                  icon: Stethoscope,
-                  label: t('dashboard.checkRisk'),
-                  sub: 'Run AI diagnostic',
-                  color: 'text-teal-700 bg-teal-50 dark:bg-teal-950/60 dark:text-teal-300 border-teal-200/80 dark:border-teal-800/40',
-                  action: () => navigate('/predict'),
-                },
-                {
-                  icon: AlertTriangle,
-                  label: t('dashboard.viewAlerts'),
-                  sub: `${atRisk} urgent alerts`,
-                  color: 'text-rose-700 bg-rose-50 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200/80 dark:border-rose-800/40',
-                  action: () => navigate('/alerts'),
-                },
-                {
-                  icon: PhoneCall,
-                  label: t('dashboard.callVet'),
-                  sub: '1962 Toll Free',
-                  color: 'text-amber-700 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/40',
-                  action: () => window.open('tel:1962'),
-                },
-              ].map((item, i) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={i}
-                    onClick={item.action}
-                    className="p-3.5 rounded-xl border border-slate-200/80 dark:border-[#1e3a2f] bg-slate-50/50 dark:bg-[#0d1a15] hover:bg-white dark:hover:bg-[#152a21] hover:shadow-sm text-left transition-all duration-150 active:scale-95 group"
-                  >
-                    <div
-                      className={`w-9 h-9 rounded-lg border flex items-center justify-center mb-2.5 transition-transform group-hover:scale-105 ${item.color}`}
-                    >
-                      <Icon size={18} />
-                    </div>
-                    <div className="font-bold text-xs text-slate-800 dark:text-slate-100 leading-tight truncate">
-                      {item.label}
-                    </div>
-                    <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
-                      {item.sub}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* DeLaval-Inspired 4-Quarter Udder Diagnostic Map */}
-          <div className="bg-white dark:bg-[#11221b] rounded-xl border border-slate-200/80 dark:border-[#1e3a2f] p-5 shadow-card">
-            <div className="flex items-center justify-between mb-4">
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-2">
-                  <Activity size={16} className="text-teal-600" />
-                  <span>4-Quarter Udder Conductivity Matrix</span>
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Milking Parlor In-Line Conductivity (mS/cm) & Subclinical Detection
-                </p>
+                <label className="block text-[#8b949e] mb-1">BODY TEMPERATURE (°C)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={diagForm.bodyTemp}
+                  onChange={e => setDiagForm({ ...diagForm, bodyTemp: e.target.value })}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] focus:border-[#58a6ff] outline-none"
+                />
               </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                Cow: Lakshmi (GJ-002)
-              </span>
+              <div>
+                <label className="block text-[#8b949e] mb-1">RUMINATION CHEWS (CPM)</label>
+                <input
+                  type="number"
+                  value={diagForm.cpm}
+                  onChange={e => setDiagForm({ ...diagForm, cpm: e.target.value })}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] focus:border-[#58a6ff] outline-none"
+                />
+              </div>
             </div>
 
-            {/* 4 Quarters Anatomical Grid */}
-            <div className="grid grid-cols-2 gap-3.5 max-w-lg mx-auto p-4 bg-slate-50 dark:bg-[#0d1a15] rounded-xl border border-slate-200/60 dark:border-[#1e3a2f]">
-              {QUARTER_TELEMETRY.map((q) => (
-                <div
-                  key={q.id}
-                  className={`p-3.5 rounded-xl border text-center transition-all ${
-                    q.danger
-                      ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-300 dark:border-rose-800'
-                      : q.warning
-                      ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-300 dark:border-amber-800'
-                      : 'bg-white dark:bg-[#11221b] border-slate-200 dark:border-[#1e3a2f]'
-                  }`}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[#8b949e] mb-1">RUMINATION DEFICIT (%)</label>
+                <input
+                  type="number"
+                  value={diagForm.ruminationDeficit}
+                  onChange={e => setDiagForm({ ...diagForm, ruminationDeficit: e.target.value })}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] focus:border-[#58a6ff] outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[#8b949e] mb-1">SOMATIC CELLS (x1000 cells/mL)</label>
+                <input
+                  type="number"
+                  value={diagForm.scc}
+                  onChange={e => setDiagForm({ ...diagForm, scc: e.target.value })}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] focus:border-[#58a6ff] outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[#8b949e] mb-1">RIGHT HIND EC (mS/cm)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={diagForm.ecRH}
+                  onChange={e => setDiagForm({ ...diagForm, ecRH: e.target.value })}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] focus:border-[#58a6ff] outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[#8b949e] mb-1">UDDER SWELLING / HARDNESS?</label>
+                <select
+                  value={diagForm.swelling}
+                  onChange={e => setDiagForm({ ...diagForm, swelling: e.target.value })}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] focus:border-[#58a6ff] outline-none"
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-mono text-xs font-extrabold text-slate-700 dark:text-slate-300">
-                      {q.id}
-                    </span>
-                    <span
-                      className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                        q.danger
-                          ? 'bg-rose-200/80 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
-                          : q.warning
-                          ? 'bg-amber-200/80 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-                          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-                      }`}
-                    >
-                      {q.status}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">{q.name}</div>
-                  <div className="mt-2 text-xl font-bold font-mono text-slate-900 dark:text-white">
-                    {q.ec} <span className="text-xs font-normal text-slate-400">mS/cm</span>
-                  </div>
-                </div>
-              ))}
+                  <option value="no">No Physical Swelling (Subclinical Target)</option>
+                  <option value="yes">Yes - Visible Swelling / Hardness (Clinical)</option>
+                </select>
+              </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-[#1e3a2f]">
-              <span className="text-[11px]">Healthy baseline: &lt; 5.5 mS/cm | Mastitis threshold: &gt; 6.2 mS/cm</span>
-              <button
-                onClick={() => navigate('/predict')}
-                className="text-primary-light font-semibold hover:underline flex items-center gap-1"
-              >
-                <span>Full Udder Scan</span>
-                <ChevronRight size={14} />
-              </button>
+            <button
+              onClick={runDiagnosticScan}
+              disabled={isScanning}
+              className="w-full mt-2 bg-[#238636] hover:bg-[#2ea043] text-black font-bold p-2.5 rounded transition-all flex items-center justify-center space-x-2"
+            >
+              {isScanning ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  <span>COMPUTING MULTI-FACTOR ENSEMBLE...</span>
+                </>
+              ) : (
+                <>
+                  <Terminal size={14} />
+                  <span>RUN PREDICTIVE DIAGNOSTIC SCAN</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Terminal Output Console */}
+          <div className="lg:col-span-6 border border-[#30363d] bg-[#0d1117] p-4 rounded-md flex flex-col font-mono text-xs">
+            <div className="border-b border-[#30363d] pb-2 text-[#8b949e] flex justify-between items-center">
+              <span>SCAN TERMINAL OUTPUT STREAM</span>
+              <span className="text-[#3fb950]">[READY]</span>
+            </div>
+
+            {diagOutput ? (
+              <div className="mt-3 space-y-2.5 flex-1">
+                <div className="text-[#8b949e]">
+                  &gt; PROBE TARGET: <span className="text-[#f0f6fc] font-bold">{diagOutput.target} ({diagOutput.tag})</span>
+                </div>
+                <div className="text-[#8b949e]">
+                  &gt; TIMESTAMP: <span className="text-[#f0f6fc]">{diagOutput.timestamp}</span>
+                </div>
+
+                <div className={`p-3 rounded border ${
+                  diagOutput.riskLevel === "HIGH" 
+                    ? "bg-[#f85149]/10 border-[#f85149] text-[#f85149]" 
+                    : diagOutput.riskLevel === "MEDIUM" 
+                    ? "bg-[#d29922]/10 border-[#d29922] text-[#d29922]" 
+                    : "bg-[#3fb950]/10 border-[#3fb950] text-[#3fb950]"
+                }`}>
+                  <div className="font-bold text-sm">
+                    {diagOutput.riskLevel === "HIGH" ? "🚨 CLINICAL RISK LEVEL: HIGH" : diagOutput.riskLevel === "MEDIUM" ? "⚡ 7-14 DAY EARLY WARNING: MEDIUM (SUBCLINICAL)" : "✅ HEALTH STATUS: NORMAL (LOW RISK)"}
+                  </div>
+                  <div className="text-[11px] mt-1 text-[#f0f6fc]">
+                    Diagnostic Confidence Score: <strong>{diagOutput.riskScore}%</strong>
+                  </div>
+                  <div className="text-[11px] mt-0.5 text-[#c9d1d9]">
+                    Evaluation Window: <strong>{diagOutput.window}</strong>
+                  </div>
+                </div>
+
+                <div className="bg-[#161b22] border border-[#30363d] p-3 rounded space-y-1.5">
+                  <div className="text-[#58a6ff] font-bold">RECOMMENDED CLINICAL / PHYTOTHERAPY ACTION:</div>
+                  <div className="text-[#f0f6fc] leading-relaxed">{diagOutput.action}</div>
+                </div>
+
+                <div className="bg-[#161b22] border border-[#30363d] p-2.5 rounded text-[11px]">
+                  <div className="text-[#8b949e] mb-1">AUDIT PARAMETER SUMMARY:</div>
+                  <div className="grid grid-cols-2 gap-1 text-[#c9d1d9]">
+                    <div>Body Temp: <span className="text-[#f0f6fc]">{diagOutput.metricsAudit.temp}</span></div>
+                    <div>Rumination CPM: <span className="text-[#f0f6fc]">{diagOutput.metricsAudit.cpm}</span></div>
+                    <div>Rumination Deficit: <span className="text-[#f0f6fc]">{diagOutput.metricsAudit.ruminationDeficit}</span></div>
+                    <div>Max Quarter EC: <span className="text-[#f0f6fc]">{diagOutput.metricsAudit.maxEC}</span></div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-8 text-center text-[#8b949e] space-y-2">
+                <Terminal size={32} className="mx-auto text-[#30363d]" />
+                <p>&gt; System idle. Configure cattle host parameters and execute scan.</p>
+                <p className="text-[10px] text-[#484f58]">7-14 Day ensemble will correlate temperature rise with rumination deficit.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab 3: Host / Cattle Registry (Nmap Host List Style) ── */}
+      {activeTab === "inventory" && (
+        <div className="border border-[#30363d] bg-[#161b22] rounded-md overflow-hidden text-xs font-mono">
+          <div className="bg-[#21262d] px-3 py-2 border-b border-[#30363d] font-bold text-[#f0f6fc] flex justify-between">
+            <span>REGISTERED LIVESTOCK HOST INVENTORY</span>
+            <span className="text-[#8b949e]">TOTAL REGISTERED: {cattle.length} HEAD</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-[#30363d] text-[#8b949e] bg-[#161b22]">
+                  <th className="py-2 px-3">TAG ID</th>
+                  <th className="py-2 px-3">NAME</th>
+                  <th className="py-2 px-3">BREED</th>
+                  <th className="py-2 px-3">AGE</th>
+                  <th className="py-2 px-3">STATUS</th>
+                  <th className="py-2 px-3">MILK YIELD</th>
+                  <th className="py-2 px-3">LAST AUDIT</th>
+                  <th className="py-2 px-3">LOCATION</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#30363d]">
+                {cattle.map(cow => (
+                  <tr key={cow.id} className="hover:bg-[#21262d]/60">
+                    <td className="py-2 px-3 text-[#58a6ff] font-bold">{cow.tag}</td>
+                    <td className="py-2 px-3 text-[#f0f6fc]">{cow.name}</td>
+                    <td className="py-2 px-3 text-[#8b949e]">{cow.breed}</td>
+                    <td className="py-2 px-3 text-[#8b949e]">{cow.age} yrs</td>
+                    <td className="py-2 px-3">
+                      {cow.riskLevel === "HIGH" ? (
+                        <span className="text-[#f85149] font-bold">● CLINICAL</span>
+                      ) : cow.riskLevel === "MEDIUM" ? (
+                        <span className="text-[#d29922] font-bold">▲ WATCH (7-14d)</span>
+                      ) : (
+                        <span className="text-[#3fb950] font-bold">✔ NORMAL</span>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-[#f0f6fc]">{cow.milkYield} L/day</td>
+                    <td className="py-2 px-3 text-[#8b949e]">{cow.lastChecked || "Today"}</td>
+                    <td className="py-2 px-3 text-[#8b949e]">{cow.village || "Anand Barn"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab 4: System Syslog & Alerts (Audit Trail) ── */}
+      {activeTab === "syslog" && (
+        <div className="border border-[#30363d] bg-[#0d1117] rounded-md p-4 font-mono text-xs space-y-2">
+          <div className="border-b border-[#30363d] pb-2 text-[#8b949e] flex justify-between items-center">
+            <span>/var/log/dhenurakshak/syslog.log — EVENT AUDIT TRAIL</span>
+            <span className="text-[#3fb950]">DAEMON RUNNING</span>
+          </div>
+
+          <div className="space-y-1 text-[11px] leading-relaxed">
+            <div className="text-[#8b949e]">
+              [2026-09-10 17:28:00] <span className="text-[#58a6ff]">[SYS_INIT]</span> DhenuRakshak IoT Gateway initialized on Raspberry Pi 3B+ (armv7l).
+            </div>
+            <div className="text-[#8b949e]">
+              [2026-09-10 17:28:01] <span className="text-[#3fb950]">[NET_UP]</span> Cloud uplink confirmed: https://dhenurakshak.netlify.app/api/telemetry.
+            </div>
+            <div className="text-[#8b949e]">
+              [2026-09-10 17:28:02] <span className="text-[#d29922]">[POWER_CONF]</span> Ear-tag profile activated: 5-minute periodic burst transmission with deep sleep gating.
+            </div>
+            <div className="text-[#8b949e]">
+              [2026-09-10 17:20:00] <span className="text-[#3fb950]">[BOUT_RECV]</span> Ingested packet from TAG-01 (COW-102): Temp=38.6C, CPM=54.2, Lat=22.5645, Lon=72.9289.
+            </div>
+            <div className="text-[#8b949e]">
+              [2026-09-10 17:14:48] <span className="text-[#8b949e]">[PWR_SLEEP]</span> TAG-01 entering ESP32 Deep Sleep (EXT0 armed on ADXL345 INT1 pin).
+            </div>
+            <div className="text-[#8b949e]">
+              [2026-09-10 16:45:10] <span className="text-[#d29922]">[ALERT_WARN]</span> TAG-02 (Lakshmi): Rumination deficit -28% observed. 7-14 day subclinical flag asserted.
+            </div>
+            <div className="text-[#8b949e]">
+              [2026-09-10 15:30:20] <span className="text-[#f85149]">[ALERT_CRIT]</span> TAG-04 (Meera): Core temperature 40.1C, yield loss detected. Clinical intervention protocol dispatched.
             </div>
           </div>
         </div>
+      )}
 
-        {/* Right Column (5 cols): Herd Health Distribution + Recent Triage */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* Health Tier Donut Breakdown */}
-          <div className="bg-white dark:bg-[#11221b] rounded-xl border border-slate-200/80 dark:border-[#1e3a2f] p-5 shadow-card">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-                Herd Health Distribution
-              </h2>
-              <span className="text-xs font-bold font-mono text-slate-500">
-                {totalCattle} Cows
-              </span>
-            </div>
-
-            <div className="flex items-center justify-center gap-4">
-              <div className="w-40 h-40 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={42}
-                      outerRadius={65}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Legend with exact numbers */}
-              <div className="space-y-2.5 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-sm bg-[#059669]" />
-                  <span className="text-slate-600 dark:text-slate-300">Healthy (Low Risk):</span>
-                  <strong className="font-mono text-slate-900 dark:text-white ml-auto">
-                    {safe}
-                  </strong>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-sm bg-[#d97706]" />
-                  <span className="text-slate-600 dark:text-slate-300">Subclinical (Watchlist):</span>
-                  <strong className="font-mono text-slate-900 dark:text-white ml-auto">
-                    {watchful}
-                  </strong>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-sm bg-[#e11d48]" />
-                  <span className="text-slate-600 dark:text-slate-300">Clinical (High Risk):</span>
-                  <strong className="font-mono text-slate-900 dark:text-white ml-auto">
-                    {atRisk}
-                  </strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Clinical Activity Stream */}
-          <div className="bg-white dark:bg-[#11221b] rounded-xl border border-slate-200/80 dark:border-[#1e3a2f] p-5 shadow-card">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-                Recent Clinical Stream
-              </h2>
-              <button
-                onClick={() => navigate('/alerts')}
-                className="text-xs text-primary-light font-semibold hover:underline"
-              >
-                View All
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {RECENT_CLINICAL_EVENTS.map((event) => {
-                const Icon = event.icon;
-                return (
-                  <div
-                    key={event.id}
-                    className="flex items-start justify-between gap-3 p-2.5 rounded-lg border border-slate-100 dark:border-[#1e3a2f] bg-slate-50/50 dark:bg-[#0d1a15] text-xs hover:bg-white dark:hover:bg-[#152a21] transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
-                          event.level === 'HIGH'
-                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                            : event.level === 'MEDIUM'
-                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                        }`}
-                      >
-                        <Icon size={14} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-800 dark:text-slate-100">
-                            {event.cow}
-                          </span>
-                          <span className="font-mono text-[10px] text-slate-400">
-                            {event.tag}
-                          </span>
-                        </div>
-                        <div className="text-slate-500 dark:text-slate-400 truncate">
-                          {event.action}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="font-mono text-[10px] text-slate-400 shrink-0">
-                      {event.time}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+      {/* ── Console Footer ── */}
+      <footer className="border-t border-[#30363d] pt-2 text-[11px] text-[#8b949e] flex flex-wrap items-center justify-between gap-2">
+        <div>
+          DhenuRakshak Console • Low-Power Veterinary Ear-Tag Architecture • SIH PS #109
         </div>
-      </div>
+        <div className="flex space-x-3">
+          <span>DUTY: 5m</span>
+          <span>SLEEP: EXT0</span>
+          <span>ACCEL: ADXL345 INT1</span>
+          <span>TEMP: LM35</span>
+        </div>
+      </footer>
     </div>
   );
 }
