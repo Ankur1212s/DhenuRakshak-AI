@@ -1,22 +1,46 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
+import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
 
 export default function Settings() {
+  const { user, setUser } = useAuthStore();
+
   const [settings, setSettings] = useState({
-    farmName: 'Surabhi Dairy & Breeding Farm',
-    ownerName: 'Ramesh Patel',
-    phone: '+91 98765 43210',
-    location: 'Anand, Gujarat',
+    farmName: user?.farmName || 'Surabhi Dairy & Breeding Farm',
+    ownerName: user?.name || 'Ramesh Patel',
+    phone: user?.phone || '+91 98765 43210',
+    location: user?.district || 'Anand, Gujarat',
     vetPhone: '1962',
     cloudEndpoint: 'https://dhenurakshak.netlify.app/api/telemetry',
-    autoAlertSms: true,
     ruminationDeficitThreshold: '15',
     feverCutoff: '39.2',
   });
 
+  // Sync state if user changes in auth store
+  useEffect(() => {
+    if (user) {
+      setSettings((prev) => ({
+        ...prev,
+        farmName: user.farmName || prev.farmName,
+        ownerName: user.name || prev.ownerName,
+        phone: user.phone || prev.phone,
+        location: user.district || prev.location,
+      }));
+    }
+  }, [user]);
+
   const handleSave = (e) => {
     e.preventDefault();
-    toast.success('Configuration updated and saved to database.');
+    if (setUser) {
+      setUser({
+        ...(user || {}),
+        name: settings.ownerName,
+        farmName: settings.farmName,
+        phone: settings.phone,
+        district: settings.location,
+      });
+    }
+    toast.success('Configuration updated and saved.');
   };
 
   return (
