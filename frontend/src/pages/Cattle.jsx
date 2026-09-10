@@ -1,27 +1,12 @@
-import { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { Plus, Search, Filter, Layers, X, ShieldCheck } from 'lucide-react';
-import toast from 'react-hot-toast';
 import useCattleStore from '../store/cattleStore';
-import CattleCard from '../components/CattleCard';
-import { useCowName } from '../utils/cowNames';
-
-const FILTERS = [
-  { key: 'ALL', labelKey: 'cattle.allRisk' },
-  { key: 'LOW', labelKey: 'cattle.low' },
-  { key: 'MEDIUM', labelKey: 'cattle.medium' },
-  { key: 'HIGH', labelKey: 'cattle.high' },
-];
-
-const POPULAR_BREEDS = ['Gir', 'Sahiwal', 'Murrah', 'HF Cross', 'Jersey', 'Rathi', 'Tharparkar', 'Kankrej'];
+import { Layers, Plus, Search, Filter, ShieldAlert, Tag, Activity } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function Cattle() {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const { cattle, addCattle } = useCattleStore();
-  const getCowName = useCowName();
-
   const [filter, setFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -29,20 +14,17 @@ export default function Cattle() {
     name: '',
     tag: '',
     breed: 'Gir',
-    age: '',
-    milkYield: '',
-    village: 'Anand',
-    lactation: 1,
+    age: '4',
+    milkYield: '14.0',
+    village: 'Barn A',
   });
 
   const filtered = cattle.filter((c) => {
     const matchFilter = filter === 'ALL' || c.riskLevel === filter;
-    const localizedName = getCowName(c.name);
     const s = search.toLowerCase();
     const matchSearch =
       !search ||
       c.name.toLowerCase().includes(s) ||
-      localizedName.toLowerCase().includes(s) ||
       c.tag.toLowerCase().includes(s) ||
       c.breed.toLowerCase().includes(s);
     return matchFilter && matchSearch;
@@ -51,263 +33,193 @@ export default function Cattle() {
   const handleAdd = (e) => {
     e.preventDefault();
     if (!form.name || !form.tag) {
-      toast.error('Cattle name and RFID tag are required');
+      toast.error('Name & Ear-Tag ID required');
       return;
     }
     addCattle({
       ...form,
       age: Number(form.age) || 4,
       milkYield: Number(form.milkYield) || 12,
-      lactation: Number(form.lactation) || 1,
       riskLevel: 'LOW',
-      daysInMilk: 15,
-      lastChecked: new Date().toISOString().split('T')[0],
+      lactation: 2,
+      daysInMilk: 45,
+      lastChecked: 'Today',
     });
+    toast.success(`Registered host ${form.tag}`);
     setShowAddModal(false);
-    setForm({ name: '', tag: '', breed: 'Gir', age: '', milkYield: '', village: 'Anand', lactation: 1 });
-    toast.success(`${form.name} registered into herd registry`);
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-24 lg:pb-12">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-primary-light">
-              Herd Registry
-            </span>
-            <span className="text-slate-300 dark:text-slate-700">•</span>
-            <span className="text-xs text-slate-500 font-medium">RFID Telemetry Tracking</span>
+    <div className="space-y-4 font-mono text-xs">
+      {/* Top Controls Console Header */}
+      <div className="border border-[#30363d] bg-[#161b22] p-3 rounded-md flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center space-x-2">
+          <span className="font-bold text-[#f0f6fc] tracking-wider">[ 02_HOST_REGISTRY ]</span>
+          <span className="text-[#8b949e]">| Total Hosts: {cattle.length}</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Search bar */}
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-2.5 text-[#8b949e]" />
+            <input
+              type="text"
+              placeholder="Search tag/host..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-[#0d1117] border border-[#30363d] rounded pl-8 pr-3 py-1.5 text-xs text-[#f0f6fc] focus:border-[#58a6ff] outline-none"
+            />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-0.5">
-            {t('cattle.title')}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            {cattle.length} cattle registered under active veterinary monitoring
-          </p>
-        </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="btn-primary text-xs py-2.5 px-4 shadow-sm self-start sm:self-auto"
-        >
-          <Plus size={16} />
-          <span>{t('cattle.addNew')}</span>
-        </button>
-      </div>
-
-      {/* Filter and Search Controls */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
-          <Search
-            size={16}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-          />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by cow name, tag (e.g. GJ-001), or breed..."
-            className="input-field pl-10 pr-8"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-
-        {/* Filter Pills */}
-        <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-          {FILTERS.map((f) => {
-            const count =
-              f.key === 'ALL'
-                ? cattle.length
-                : cattle.filter((c) => c.riskLevel === f.key).length;
-            const isSelected = filter === f.key;
-            return (
+          {/* Filter tabs */}
+          <div className="flex border border-[#30363d] rounded bg-[#0d1117] p-0.5">
+            {['ALL', 'LOW', 'MEDIUM', 'HIGH'].map((k) => (
               <button
-                key={f.key}
-                onClick={() => setFilter(f.key)}
-                className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-150 flex items-center gap-1.5 ${
-                  isSelected
-                    ? 'bg-primary text-white shadow-sm'
-                    : 'bg-white dark:bg-[#11221b] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#1e3a2f] hover:bg-slate-50 dark:hover:bg-[#183327]'
+                key={k}
+                onClick={() => setFilter(k)}
+                className={`px-2.5 py-1 rounded text-[11px] font-bold ${
+                  filter === k
+                    ? 'bg-[#21262d] text-[#f0f6fc] border border-[#30363d]'
+                    : 'text-[#8b949e] hover:text-[#c9d1d9]'
                 }`}
               >
-                <span>{t(f.labelKey)}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-                    isSelected
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-                  }`}
-                >
-                  {count}
-                </span>
+                {k === 'ALL' ? 'ALL' : k === 'LOW' ? 'NORMAL' : k === 'MEDIUM' ? 'WATCH' : 'CLINICAL'}
               </button>
-            );
-          })}
+            ))}
+          </div>
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-[#238636] hover:bg-[#2ea043] text-black font-bold px-3 py-1.5 rounded flex items-center space-x-1.5"
+          >
+            <Plus size={13} className="stroke-[3]" />
+            <span>ENROLL_HOST</span>
+          </button>
         </div>
       </div>
 
-      {/* Cattle Cards Grid */}
-      {filtered.length === 0 ? (
-        <div className="bg-white dark:bg-[#11221b] rounded-2xl border border-slate-200/80 dark:border-[#1e3a2f] p-12 text-center max-w-lg mx-auto shadow-sm">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/40 flex items-center justify-center mx-auto mb-4">
-            <ShieldCheck size={28} />
-          </div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-white">
-            No cattle found matching criteria
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-            Try adjusting your search query or selected risk filter to view herd members.
-          </p>
-          <button
-            onClick={() => {
-              setFilter('ALL');
-              setSearch('');
-            }}
-            className="mt-4 btn-secondary text-xs py-2 px-4 inline-flex"
-          >
-            Clear Filters
-          </button>
+      {/* High-density Host Table */}
+      <div className="border border-[#30363d] bg-[#161b22] rounded-md overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-[#30363d] text-[#8b949e] bg-[#21262d] text-[11px]">
+                <th className="py-2.5 px-3">EAR_TAG</th>
+                <th className="py-2.5 px-3">HOST_NAME</th>
+                <th className="py-2.5 px-3">BREED</th>
+                <th className="py-2.5 px-3">AGE</th>
+                <th className="py-2.5 px-3">HEALTH_STATE</th>
+                <th className="py-2.5 px-3">MILK_YIELD</th>
+                <th className="py-2.5 px-3">LAST_PROBE</th>
+                <th className="py-2.5 px-3">LOCATION</th>
+                <th className="py-2.5 px-3 text-right">ACTION</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#30363d]">
+              {filtered.map((c) => (
+                <tr key={c.id} className="hover:bg-[#21262d]/70 transition-colors">
+                  <td className="py-2.5 px-3 text-[#58a6ff] font-bold">{c.tag}</td>
+                  <td className="py-2.5 px-3 text-[#f0f6fc] font-semibold">{c.name}</td>
+                  <td className="py-2.5 px-3 text-[#8b949e]">{c.breed}</td>
+                  <td className="py-2.5 px-3 text-[#8b949e]">{c.age} yrs</td>
+                  <td className="py-2.5 px-3 font-bold">
+                    {c.riskLevel === 'HIGH' ? (
+                      <span className="text-[#f85149] bg-[#f85149]/10 px-2 py-0.5 rounded border border-[#f85149]/30">● CLINICAL_HIGH</span>
+                    ) : c.riskLevel === 'MEDIUM' ? (
+                      <span className="text-[#d29922] bg-[#d29922]/10 px-2 py-0.5 rounded border border-[#d29922]/30">▲ SUBCLINICAL (7-14d)</span>
+                    ) : (
+                      <span className="text-[#3fb950] bg-[#3fb950]/10 px-2 py-0.5 rounded border border-[#3fb950]/30">✔ OPTIMAL</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3 text-[#f0f6fc]">{c.milkYield} L/d</td>
+                  <td className="py-2.5 px-3 text-[#8b949e]">{c.lastChecked || 'Active'}</td>
+                  <td className="py-2.5 px-3 text-[#8b949e]">{c.village || 'Anand Shed'}</td>
+                  <td className="py-2.5 px-3 text-right">
+                    <button
+                      onClick={() => navigate(`/cattle/${c.id}`)}
+                      className="px-2 py-1 rounded bg-[#0d1117] border border-[#30363d] text-[#58a6ff] hover:border-[#58a6ff]"
+                    >
+                      AUDIT_LOG &gt;
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((cow) => (
-            <CattleCard key={cow.id} cow={cow} />
-          ))}
-        </div>
-      )}
+      </div>
 
-      {/* Add Cattle Modal */}
+      {/* Add Modal (Console Dialog) */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-white dark:bg-[#11221b] w-full max-w-lg rounded-2xl p-6 shadow-xl border border-slate-200 dark:border-[#1e3a2f] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-[#1e3a2f] mb-5">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Register New Cattle
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Add animal RFID tag & baseline lactation parameters
-                </p>
-              </div>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
-              >
-                <X size={16} />
-              </button>
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
+          <div className="border border-[#30363d] bg-[#161b22] max-w-md w-full p-4 rounded-md space-y-3">
+            <div className="border-b border-[#30363d] pb-2 font-bold text-[#f0f6fc] flex justify-between">
+              <span>ENROLL NEW EAR-TAG NODE / HOST</span>
+              <button onClick={() => setShowAddModal(false)} className="text-[#8b949e] hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleAdd} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                    Cow Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="e.g. Kamla, Nandini"
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                    Ear Tag / RFID *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={form.tag}
-                    onChange={(e) => setForm({ ...form, tag: e.target.value })}
-                    placeholder="e.g. GJ-009"
-                    className="input-field font-mono"
-                  />
-                </div>
+            <form onSubmit={handleAdd} className="space-y-2.5">
+              <div>
+                <label className="block text-[#8b949e] mb-1">HOST NAME</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Kamdhenu"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] outline-none"
+                />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-[#8b949e] mb-1">RFID / EAR-TAG ID</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. TAG-009"
+                  value={form.tag}
+                  onChange={(e) => setForm({ ...form, tag: e.target.value })}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                    Breed
-                  </label>
+                  <label className="block text-[#8b949e] mb-1">BREED</label>
                   <select
                     value={form.breed}
                     onChange={(e) => setForm({ ...form, breed: e.target.value })}
-                    className="input-field"
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] outline-none"
                   >
-                    {POPULAR_BREEDS.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
+                    {['Gir', 'Sahiwal', 'Murrah', 'HF Cross', 'Jersey', 'Rathi', 'Tharparkar'].map((b) => (
+                      <option key={b} value={b}>{b}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                    Age (Years)
-                  </label>
+                  <label className="block text-[#8b949e] mb-1">BASELINE YIELD (L)</label>
                   <input
                     type="number"
-                    min="1"
-                    max="20"
-                    value={form.age}
-                    onChange={(e) => setForm({ ...form, age: e.target.value })}
-                    placeholder="e.g. 4"
-                    className="input-field font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                    Avg. Daily Milk (Liters)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
                     value={form.milkYield}
                     onChange={(e) => setForm({ ...form, milkYield: e.target.value })}
-                    placeholder="e.g. 14.5"
-                    className="input-field font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                    Lactation Cycle (Parity)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={form.lactation}
-                    onChange={(e) => setForm({ ...form, lactation: e.target.value })}
-                    className="input-field font-mono"
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] outline-none"
                   />
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 dark:border-[#1e3a2f] flex justify-end gap-2.5">
+              <div className="flex justify-end space-x-2 pt-2 border-t border-[#30363d]">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="btn-secondary text-xs py-2 px-4"
+                  className="px-3 py-1.5 border border-[#30363d] rounded text-[#8b949e]"
                 >
-                  Cancel
+                  CANCEL
                 </button>
-                <button type="submit" className="btn-primary text-xs py-2 px-5">
-                  Save to Registry
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-[#238636] text-black font-bold rounded"
+                >
+                  SAVE_HOST
                 </button>
               </div>
             </form>

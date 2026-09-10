@@ -1,9 +1,8 @@
-import { useEffect } from 'react';
+﻿import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import useAuthStore from './store/authStore';
 import useThemeStore from './store/themeStore';
-import BottomNav from './components/BottomNav';
-import DesktopNav from './components/DesktopNav';
+import TopNav from './components/TopNav';
 
 // Pages
 import Login from './pages/Login';
@@ -26,14 +25,11 @@ function ProtectedLayout({ children }) {
   const { isAuth } = useAuthStore();
   if (!isAuth) return <Navigate to="/login" replace />;
   return (
-    <div className="min-h-screen bg-bg dark:bg-[#091310] flex flex-col lg:flex-row text-slate-900 dark:text-slate-100">
-      <DesktopNav />
-      <div className="flex-1 min-w-0 flex flex-col min-h-screen">
-        <main className="flex-1 min-w-0 pb-24 lg:pb-12">
-          {children}
-        </main>
-      </div>
-      <BottomNav />
+    <div className="min-h-screen bg-[#0b0f17] text-[#c9d1d9] font-mono flex flex-col">
+      <TopNav />
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5">
+        {children}
+      </main>
     </div>
   );
 }
@@ -50,17 +46,6 @@ export default function App() {
   useEffect(() => {
     initTheme();
   }, [initTheme]);
-
-  useEffect(() => {
-    const lang = localStorage.getItem('mastitrack_lang') || 'en';
-    if (lang !== 'en') {
-      const select = document.querySelector('.goog-te-combo');
-      if (select) {
-        select.value = lang;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    }
-  }, [location.pathname]);
 
   return (
     <Routes>
