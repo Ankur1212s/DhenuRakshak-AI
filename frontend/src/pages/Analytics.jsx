@@ -1,47 +1,41 @@
 ﻿import React from 'react';
-import { Terminal, TrendingUp, DollarSign, Activity } from 'lucide-react';
 
 export default function Analytics() {
   return (
-    <div className="space-y-4 font-mono text-xs">
-      <div className="border border-[#30363d] bg-[#161b22] p-3 rounded-md flex items-center justify-between">
-        <div className="flex items-center space-x-2 font-bold text-[#f0f6fc]">
-          <Terminal size={14} className="text-[#58a6ff]" />
-          <span>[ 05_EPIDEMIOLOGY ] — HERD HEALTH & ECONOMIC CONSERVATION</span>
-        </div>
-        <span className="text-[#8b949e]">AUDIT PERIOD: 30 DAYS</span>
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <div>
+        <h1 className="text-xl font-bold text-gray-900">Farm Health & Cost Savings</h1>
+        <p className="text-xs text-gray-500">Economic and health benefits of 7-14 day early mastitis detection</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="border border-[#30363d] bg-[#161b22] p-3 rounded-md">
-          <div className="text-[#8b949e]">AVOIDED VET ANTIBIOTIC COSTS</div>
-          <div className="text-xl font-bold text-[#3fb950] mt-1">₹ 18,500</div>
-          <div className="text-[10px] text-[#8b949e] mt-0.5">Via 7-14d early phytotherapy</div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="text-sm font-medium text-gray-500">Antibiotic Cost Saved</div>
+          <div className="text-2xl font-bold text-green-700 mt-2">₹ 18,500</div>
+          <div className="text-xs text-gray-500 mt-1">By preventing clinical cases</div>
         </div>
-        <div className="border border-[#30363d] bg-[#161b22] p-3 rounded-md">
-          <div className="text-[#8b949e]">PRESERVED MILK PRODUCTION</div>
-          <div className="text-xl font-bold text-[#58a6ff] mt-1">420 Liters</div>
-          <div className="text-[10px] text-[#8b949e] mt-0.5">Zero antibiotic withdrawal discards</div>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="text-sm font-medium text-gray-500">Milk Loss Prevented</div>
+          <div className="text-2xl font-bold text-blue-700 mt-2">420 Liters</div>
+          <div className="text-xs text-gray-500 mt-1">No milk dumped due to antibiotics</div>
         </div>
-        <div className="border border-[#30363d] bg-[#161b22] p-3 rounded-md">
-          <div className="text-[#8b949e]">HERD SOMATIC RETENTION SCORE</div>
-          <div className="text-xl font-bold text-[#f0f6fc] mt-1">92.4%</div>
-          <div className="text-[10px] text-[#3fb950] mt-0.5">Optimal udder quarter health</div>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="text-sm font-medium text-gray-500">Herd Health Score</div>
+          <div className="text-2xl font-bold text-gray-900 mt-2">92%</div>
+          <div className="text-xs text-green-600 mt-1">Excellent overall health</div>
         </div>
       </div>
 
-      <div className="border border-[#30363d] bg-[#161b22] rounded-md p-4 space-y-3">
-        <div className="border-b border-[#30363d] pb-2 font-bold text-[#f0f6fc]">
-          7-14 DAY EARLY WARNING EFFICACY MATRIX (SIH PROBLEM STATEMENT #109)
-        </div>
-        <div className="text-[#c9d1d9] leading-relaxed space-y-2">
-          <p>
-            &gt; By correlating ear-tag rumination bouts (drops &gt; 15%) with slight temperature rises (+0.4°C), subclinical mastitis is intercepted prior to visible milk clots or udder damage.
-          </p>
-          <p>
-            &gt; Economic savings: Eliminates ₹3,000–₹5,000 per episode in clinical antibiotic infusions, milk dumping, and irreversible quarter loss.
-          </p>
-        </div>
+      <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm space-y-3">
+        <h2 className="font-semibold text-gray-900 text-sm">How Early Detection Works</h2>
+        <p className="text-sm text-gray-600 leading-relaxed">
+          Cows chew cud (rumination) for 450 to 550 minutes every day. When a subclinical infection starts in the udder, the cow experiences mild discomfort and rumination drops by 15% to 25%, while body temperature rises slightly (+0.4°C).
+        </p>
+        <p className="text-sm text-gray-600 leading-relaxed">
+          By detecting this change with lightweight ear tags 7 to 14 days before milk clots or udder swelling appear, farmers can apply affordable herbal treatments (Aloe vera + Turmeric) and cure the infection without expensive veterinary antibiotics or losing milk production.
+        </p>
       </div>
     </div>
   );

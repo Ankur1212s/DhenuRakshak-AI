@@ -1,225 +1,178 @@
 ﻿import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import useCattleStore from '../store/cattleStore';
-import { Layers, Plus, Search, Filter, ShieldAlert, Tag, Activity } from 'lucide-react';
-import toast from 'react-hot-toast';
 
 export default function Cattle() {
-  const navigate = useNavigate();
   const { cattle, addCattle } = useCattleStore();
-  const [filter, setFilter] = useState('ALL');
   const [search, setSearch] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
     name: '',
     tag: '',
     breed: 'Gir',
     age: '4',
     milkYield: '14.0',
-    village: 'Barn A',
+    village: 'Shed 1',
   });
 
-  const filtered = cattle.filter((c) => {
-    const matchFilter = filter === 'ALL' || c.riskLevel === filter;
-    const s = search.toLowerCase();
-    const matchSearch =
-      !search ||
-      c.name.toLowerCase().includes(s) ||
-      c.tag.toLowerCase().includes(s) ||
-      c.breed.toLowerCase().includes(s);
-    return matchFilter && matchSearch;
-  });
+  const filtered = cattle.filter(
+    (c) =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.tag.toLowerCase().includes(search.toLowerCase()) ||
+      c.breed.toLowerCase().includes(search.toLowerCase())
+  );
 
-  const handleAdd = (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.name || !form.tag) {
-      toast.error('Name & Ear-Tag ID required');
-      return;
-    }
+    if (!form.name || !form.tag) return;
     addCattle({
       ...form,
       age: Number(form.age) || 4,
       milkYield: Number(form.milkYield) || 12,
       riskLevel: 'LOW',
-      lactation: 2,
-      daysInMilk: 45,
-      lastChecked: 'Today',
     });
-    toast.success(`Registered host ${form.tag}`);
-    setShowAddModal(false);
+    setShowModal(false);
+    setForm({ name: '', tag: '', breed: 'Gir', age: '4', milkYield: '14.0', village: 'Shed 1' });
   };
 
   return (
-    <div className="space-y-4 font-mono text-xs">
-      {/* Top Controls Console Header */}
-      <div className="border border-[#30363d] bg-[#161b22] p-3 rounded-md flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center space-x-2">
-          <span className="font-bold text-[#f0f6fc] tracking-wider">[ 02_HOST_REGISTRY ]</span>
-          <span className="text-[#8b949e]">| Total Hosts: {cattle.length}</span>
+    <div className="space-y-4">
+      {/* Top Header & Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Cattle Directory</h1>
+          <p className="text-xs text-gray-500">Manage and monitor registered cattle</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Search bar */}
-          <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-2.5 text-[#8b949e]" />
-            <input
-              type="text"
-              placeholder="Search tag/host..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="bg-[#0d1117] border border-[#30363d] rounded pl-8 pr-3 py-1.5 text-xs text-[#f0f6fc] focus:border-[#58a6ff] outline-none"
-            />
-          </div>
-
-          {/* Filter tabs */}
-          <div className="flex border border-[#30363d] rounded bg-[#0d1117] p-0.5">
-            {['ALL', 'LOW', 'MEDIUM', 'HIGH'].map((k) => (
-              <button
-                key={k}
-                onClick={() => setFilter(k)}
-                className={`px-2.5 py-1 rounded text-[11px] font-bold ${
-                  filter === k
-                    ? 'bg-[#21262d] text-[#f0f6fc] border border-[#30363d]'
-                    : 'text-[#8b949e] hover:text-[#c9d1d9]'
-                }`}
-              >
-                {k === 'ALL' ? 'ALL' : k === 'LOW' ? 'NORMAL' : k === 'MEDIUM' ? 'WATCH' : 'CLINICAL'}
-              </button>
-            ))}
-          </div>
-
+        <div className="flex items-center space-x-2">
+          <input
+            type="text"
+            placeholder="Search by tag or name..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-gray-500 bg-white"
+          />
           <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-[#238636] hover:bg-[#2ea043] text-black font-bold px-3 py-1.5 rounded flex items-center space-x-1.5"
+            onClick={() => setShowModal(true)}
+            className="bg-green-700 hover:bg-green-800 text-white text-sm font-medium px-4 py-1.5 rounded-md"
           >
-            <Plus size={13} className="stroke-[3]" />
-            <span>ENROLL_HOST</span>
+            + Add Cattle
           </button>
         </div>
       </div>
 
-      {/* High-density Host Table */}
-      <div className="border border-[#30363d] bg-[#161b22] rounded-md overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-[#30363d] text-[#8b949e] bg-[#21262d] text-[11px]">
-                <th className="py-2.5 px-3">EAR_TAG</th>
-                <th className="py-2.5 px-3">HOST_NAME</th>
-                <th className="py-2.5 px-3">BREED</th>
-                <th className="py-2.5 px-3">AGE</th>
-                <th className="py-2.5 px-3">HEALTH_STATE</th>
-                <th className="py-2.5 px-3">MILK_YIELD</th>
-                <th className="py-2.5 px-3">LAST_PROBE</th>
-                <th className="py-2.5 px-3">LOCATION</th>
-                <th className="py-2.5 px-3 text-right">ACTION</th>
+      {/* Clean White Table */}
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-gray-50 text-gray-600 text-xs uppercase border-b border-gray-200">
+            <tr>
+              <th className="py-3 px-5">Tag ID</th>
+              <th className="py-3 px-5">Name</th>
+              <th className="py-3 px-5">Breed</th>
+              <th className="py-3 px-5">Age</th>
+              <th className="py-3 px-5">Daily Yield</th>
+              <th className="py-3 px-5">Health Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {filtered.map((cow) => (
+              <tr key={cow.id} className="hover:bg-gray-50">
+                <td className="py-3.5 px-5 font-medium text-gray-900">{cow.tag}</td>
+                <td className="py-3.5 px-5 text-gray-800">{cow.name}</td>
+                <td className="py-3.5 px-5 text-gray-500">{cow.breed}</td>
+                <td className="py-3.5 px-5 text-gray-500">{cow.age} yrs</td>
+                <td className="py-3.5 px-5 text-gray-800">{cow.milkYield} L</td>
+                <td className="py-3.5 px-5">
+                  {cow.riskLevel === 'HIGH' ? (
+                    <span className="bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full font-medium">
+                      High Risk
+                    </span>
+                  ) : cow.riskLevel === 'MEDIUM' ? (
+                    <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-medium">
+                      Watch (7-14 Days)
+                    </span>
+                  ) : (
+                    <span className="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full font-medium">
+                      Healthy
+                    </span>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-[#30363d]">
-              {filtered.map((c) => (
-                <tr key={c.id} className="hover:bg-[#21262d]/70 transition-colors">
-                  <td className="py-2.5 px-3 text-[#58a6ff] font-bold">{c.tag}</td>
-                  <td className="py-2.5 px-3 text-[#f0f6fc] font-semibold">{c.name}</td>
-                  <td className="py-2.5 px-3 text-[#8b949e]">{c.breed}</td>
-                  <td className="py-2.5 px-3 text-[#8b949e]">{c.age} yrs</td>
-                  <td className="py-2.5 px-3 font-bold">
-                    {c.riskLevel === 'HIGH' ? (
-                      <span className="text-[#f85149] bg-[#f85149]/10 px-2 py-0.5 rounded border border-[#f85149]/30">● CLINICAL_HIGH</span>
-                    ) : c.riskLevel === 'MEDIUM' ? (
-                      <span className="text-[#d29922] bg-[#d29922]/10 px-2 py-0.5 rounded border border-[#d29922]/30">▲ SUBCLINICAL (7-14d)</span>
-                    ) : (
-                      <span className="text-[#3fb950] bg-[#3fb950]/10 px-2 py-0.5 rounded border border-[#3fb950]/30">✔ OPTIMAL</span>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-3 text-[#f0f6fc]">{c.milkYield} L/d</td>
-                  <td className="py-2.5 px-3 text-[#8b949e]">{c.lastChecked || 'Active'}</td>
-                  <td className="py-2.5 px-3 text-[#8b949e]">{c.village || 'Anand Shed'}</td>
-                  <td className="py-2.5 px-3 text-right">
-                    <button
-                      onClick={() => navigate(`/cattle/${c.id}`)}
-                      className="px-2 py-1 rounded bg-[#0d1117] border border-[#30363d] text-[#58a6ff] hover:border-[#58a6ff]"
-                    >
-                      AUDIT_LOG &gt;
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      {/* Add Modal (Console Dialog) */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
-          <div className="border border-[#30363d] bg-[#161b22] max-w-md w-full p-4 rounded-md space-y-3">
-            <div className="border-b border-[#30363d] pb-2 font-bold text-[#f0f6fc] flex justify-between">
-              <span>ENROLL NEW EAR-TAG NODE / HOST</span>
-              <button onClick={() => setShowAddModal(false)} className="text-[#8b949e] hover:text-white">✕</button>
+      {/* Simple Add Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-5 space-y-4 shadow-lg">
+            <div className="flex justify-between items-center border-b border-gray-200 pb-2">
+              <h3 className="font-semibold text-gray-900">Add New Cattle</h3>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
 
-            <form onSubmit={handleAdd} className="space-y-2.5">
+            <form onSubmit={handleSubmit} className="space-y-3 text-sm">
               <div>
-                <label className="block text-[#8b949e] mb-1">HOST NAME</label>
+                <label className="block text-gray-700 mb-1">Cow Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Kamdhenu"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] outline-none"
+                  className="w-full border border-gray-300 rounded p-2 outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-[#8b949e] mb-1">RFID / EAR-TAG ID</label>
+                <label className="block text-gray-700 mb-1">Ear Tag ID</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. TAG-009"
+                  placeholder="e.g. TAG-102"
                   value={form.tag}
                   onChange={(e) => setForm({ ...form, tag: e.target.value })}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] outline-none"
+                  className="w-full border border-gray-300 rounded p-2 outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[#8b949e] mb-1">BREED</label>
+                  <label className="block text-gray-700 mb-1">Breed</label>
                   <select
                     value={form.breed}
                     onChange={(e) => setForm({ ...form, breed: e.target.value })}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] outline-none"
+                    className="w-full border border-gray-300 rounded p-2 outline-none"
                   >
-                    {['Gir', 'Sahiwal', 'Murrah', 'HF Cross', 'Jersey', 'Rathi', 'Tharparkar'].map((b) => (
+                    {['Gir', 'Sahiwal', 'Murrah', 'HF Cross', 'Jersey'].map((b) => (
                       <option key={b} value={b}>{b}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[#8b949e] mb-1">BASELINE YIELD (L)</label>
+                  <label className="block text-gray-700 mb-1">Daily Yield (L)</label>
                   <input
                     type="number"
                     value={form.milkYield}
                     onChange={(e) => setForm({ ...form, milkYield: e.target.value })}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2 text-[#f0f6fc] outline-none"
+                    className="w-full border border-gray-300 rounded p-2 outline-none"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2 border-t border-[#30363d]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-3 py-1.5 border border-[#30363d] rounded text-[#8b949e]"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-1.5 border border-gray-300 rounded text-gray-700"
                 >
-                  CANCEL
+                  Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-[#238636] text-black font-bold rounded"
+                  className="px-4 py-1.5 bg-green-700 text-white rounded font-medium"
                 >
-                  SAVE_HOST
+                  Save
                 </button>
               </div>
             </form>

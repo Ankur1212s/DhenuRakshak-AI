@@ -1,58 +1,49 @@
 ﻿import React from 'react';
-import { AlertTriangle, ShieldAlert, CheckCircle2, Terminal } from 'lucide-react';
-import useCattleStore from '../store/cattleStore';
 
 export default function Alerts() {
-  const { cattle } = useCattleStore();
-  const alertList = [
-    { id: 1, tag: 'TAG-002', cow: 'Lakshmi', level: 'HIGH', time: '1h ago', event: 'Acute Somatic Cell Elevation (>720k) & Core Temp 40.1°C', action: 'Immediate veterinary antibiotics required' },
-    { id: 2, tag: 'TAG-006', cow: 'Parvati', level: 'HIGH', time: '3h ago', event: 'Right Hind Quarter EC > 6.8 mS/cm', action: 'Quarantine and milk quarter separately' },
-    { id: 3, tag: 'TAG-003', cow: 'Kamdhenu', level: 'MEDIUM', time: '5h ago', event: 'Subclinical Rumination Deficit -18% (7-14d Warning)', action: 'Apply ICAR Herbal Phytotherapy paste' },
-    { id: 4, tag: 'TAG-008', cow: 'Radha', level: 'MEDIUM', time: '8h ago', event: 'Chew cadence drop (38 CPM) post-evening feed', action: 'Monitor next 5-minute duty cycle burst' },
+  const alerts = [
+    { id: 1, cow: 'Lakshmi', tag: 'TAG-002', status: 'High Risk', time: '1 hour ago', reason: 'High Body Temperature (40.1°C)', action: 'Contact veterinary doctor immediately' },
+    { id: 2, cow: 'Kamdhenu', tag: 'TAG-003', status: 'Early Warning', time: '5 hours ago', reason: 'Low rumination chewing rate (-18%)', action: 'Apply Aloe vera + Turmeric herbal paste' },
+    { id: 3, cow: 'Parvati', tag: 'TAG-006', status: 'High Risk', time: 'Yesterday', reason: 'Abnormal milk conductivity detected', action: 'Milk this cow last and test sample' },
   ];
 
   return (
-    <div className="space-y-4 font-mono text-xs">
-      <div className="border border-[#30363d] bg-[#161b22] p-3 rounded-md flex items-center justify-between">
-        <div className="flex items-center space-x-2 font-bold text-[#f0f6fc]">
-          <Terminal size={14} className="text-[#f85149]" />
-          <span>[ 04_ALERTS ] — CLINICAL & SUBCLINICAL INCIDENT LOG</span>
-        </div>
-        <span className="text-[#8b949e]">SEVERITY: HIGH / MEDIUM ACTIVE</span>
+    <div className="space-y-4 max-w-3xl mx-auto">
+      <div>
+        <h1 className="text-xl font-bold text-gray-900">Health Alerts</h1>
+        <p className="text-xs text-gray-500">Active early warnings and notifications requiring attention</p>
       </div>
 
-      <div className="space-y-2.5">
-        {alertList.map((a) => (
+      <div className="space-y-3">
+        {alerts.map((a) => (
           <div
             key={a.id}
-            className={`border p-3 rounded-md ${
-              a.level === 'HIGH'
-                ? 'bg-[#161b22] border-[#f85149]/40'
-                : 'bg-[#161b22] border-[#d29922]/40'
+            className={`bg-white border rounded-lg p-4 shadow-sm ${
+              a.status === 'High Risk' ? 'border-red-200' : 'border-amber-200'
             }`}
           >
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#30363d] pb-2 mb-2">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
               <div className="flex items-center space-x-2">
-                <span
-                  className={`font-bold px-2 py-0.5 rounded text-[10px] ${
-                    a.level === 'HIGH'
-                      ? 'bg-[#f85149] text-black'
-                      : 'bg-[#d29922] text-black'
-                  }`}
-                >
-                  {a.level === 'HIGH' ? 'CRITICAL_INCIDENT' : 'EARLY_WARNING_7-14D'}
-                </span>
-                <span className="text-[#f0f6fc] font-bold">
+                <span className="font-semibold text-gray-900 text-sm">
                   {a.cow} ({a.tag})
                 </span>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    a.status === 'High Risk'
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {a.status}
+                </span>
               </div>
-              <span className="text-[#8b949e]">{a.time}</span>
+              <span className="text-xs text-gray-400">{a.time}</span>
             </div>
 
-            <div className="text-[#f0f6fc] font-semibold">{a.event}</div>
-            <div className="text-[#8b949e] mt-1">
-              &gt; ACTION DISPATCH: <span className="text-[#58a6ff]">{a.action}</span>
-            </div>
+            <p className="text-sm text-gray-700 mt-2">{a.reason}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              <strong>Action:</strong> {a.action}
+            </p>
           </div>
         ))}
       </div>
