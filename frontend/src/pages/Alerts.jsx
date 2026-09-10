@@ -2,48 +2,69 @@
 
 export default function Alerts() {
   const alerts = [
-    { id: 1, cow: 'Lakshmi', tag: 'TAG-002', status: 'High Risk', time: '1 hour ago', reason: 'High Body Temperature (40.1°C)', action: 'Contact veterinary doctor immediately' },
-    { id: 2, cow: 'Kamdhenu', tag: 'TAG-003', status: 'Early Warning', time: '5 hours ago', reason: 'Low rumination chewing rate (-18%)', action: 'Apply Aloe vera + Turmeric herbal paste' },
-    { id: 3, cow: 'Parvati', tag: 'TAG-006', status: 'High Risk', time: 'Yesterday', reason: 'Abnormal milk conductivity detected', action: 'Milk this cow last and test sample' },
+    {
+      id: 1,
+      type: 'SICK (RED ALERT)',
+      tag: 'TAG-002',
+      cow: 'Lakshmi',
+      time: '1h ago',
+      issue: 'Rumination dropped to 210 mins/day (-45%) with ear temp spike (40.1°C).',
+      recommendation: 'Check cow immediately for acute mastitis signs (hard/swollen quarter). Isolate and consult veterinarian.',
+      badgeClass: 'bg-red-600 text-white',
+      borderClass: 'border-red-300 bg-red-50/40',
+    },
+    {
+      id: 2,
+      type: 'SUSPICIOUS (YELLOW ALERT)',
+      tag: 'TAG-003',
+      cow: 'Kamdhenu',
+      time: '5h ago',
+      issue: 'Rumination dropped to 340 mins/day (-22%). Early subclinical mastitis alert (7-14 days before clinical symptoms).',
+      recommendation: 'Apply ICAR herbal paste (Aloe vera, Turmeric, Lime) to all quarters. Milk this cow last in parlor.',
+      badgeClass: 'bg-amber-400 text-slate-950 font-bold',
+      borderClass: 'border-amber-300 bg-amber-50/40',
+    },
+    {
+      id: 3,
+      type: 'SICK (RED ALERT)',
+      tag: 'TAG-006',
+      cow: 'Parvati',
+      time: 'Yesterday',
+      issue: 'Severe drop in both eating time (under 2 hours) and rumination (190 mins).',
+      recommendation: 'Check feed intake and temperature. Administer California Mastitis Test (CMT) strip.',
+      badgeClass: 'bg-red-600 text-white',
+      borderClass: 'border-red-300 bg-red-50/40',
+    },
   ];
 
   return (
-    <div className="space-y-4 max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto space-y-4 text-slate-800">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Health Alerts</h1>
-        <p className="text-xs text-gray-500">Active early warnings and notifications requiring attention</p>
+        <h1 className="text-xl font-bold text-slate-900">Health Alerts</h1>
+        <p className="text-xs text-slate-500">
+          CowManager-style alerts based on real deviations in ear-sensor rumination and temperature
+        </p>
       </div>
 
       <div className="space-y-3">
         {alerts.map((a) => (
-          <div
-            key={a.id}
-            className={`bg-white border rounded-lg p-4 shadow-sm ${
-              a.status === 'High Risk' ? 'border-red-200' : 'border-amber-200'
-            }`}
-          >
-            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+          <div key={a.id} className={`border rounded p-4 shadow-sm bg-white ${a.borderClass}`}>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
               <div className="flex items-center space-x-2">
-                <span className="font-semibold text-gray-900 text-sm">
-                  {a.cow} ({a.tag})
+                <span className={`text-xs px-2 py-0.5 rounded font-black tracking-wide ${a.badgeClass}`}>
+                  {a.type}
                 </span>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    a.status === 'High Risk'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-amber-100 text-amber-800'
-                  }`}
-                >
-                  {a.status}
+                <span className="font-bold text-sm text-slate-900">
+                  {a.cow} (Tag #{a.tag})
                 </span>
               </div>
-              <span className="text-xs text-gray-400">{a.time}</span>
+              <span className="text-xs text-slate-400 font-mono">{a.time}</span>
             </div>
 
-            <p className="text-sm text-gray-700 mt-2">{a.reason}</p>
-            <p className="text-xs text-gray-500 mt-1">
-              <strong>Action:</strong> {a.action}
-            </p>
+            <p className="text-xs text-slate-700 font-medium mt-2">{a.issue}</p>
+            <div className="text-xs text-slate-800 mt-2 pt-2 border-t border-slate-200/60">
+              <strong className="text-slate-900">Management Action:</strong> {a.recommendation}
+            </div>
           </div>
         ))}
       </div>
