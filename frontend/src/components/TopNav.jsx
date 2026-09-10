@@ -1,4 +1,4 @@
-﻿import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import useCattleStore from "../store/cattleStore";
 import useAuthStore from "../store/authStore";
 import toast from "react-hot-toast";
@@ -45,9 +45,6 @@ export default function TopNav() {
               <h1 className="font-serif font-bold text-xl text-[#1e3a5f] tracking-tight leading-none">
                 LactoGuard
               </h1>
-              <span className="text-[11px] font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-300 font-semibold">
-                AI 3.2
-              </span>
             </div>
             <p className="text-[11px] text-slate-600 font-medium tracking-wide mt-0.5">
               Precision Bovine Health Intelligence & Mastitis Early Forecasting
