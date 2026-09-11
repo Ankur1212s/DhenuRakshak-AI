@@ -1,13 +1,23 @@
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { Globe, ChevronDown } from "lucide-react";
 import useCattleStore from "../store/cattleStore";
 import useAuthStore from "../store/authStore";
 import toast from "react-hot-toast";
+import LanguageSelector, { LANGUAGES } from "./LanguageSelector";
+import { getStoredLanguage } from "../utils/translator";
 
 export default function TopNav() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const { cattle } = useCattleStore();
   const { user, logout } = useAuthStore();
+  const [showLangModal, setShowLangModal] = useState(false);
+
   const alertCount = cattle.filter((c) => c.riskLevel === "HIGH" || c.riskLevel === "MEDIUM").length;
+  const currentSavedLang = getStoredLanguage();
+  const activeLang = LANGUAGES.find((l) => l.code === (currentSavedLang || i18n.language)) || LANGUAGES[0];
 
   const handleLogout = () => {
     logout();
@@ -52,15 +62,27 @@ export default function TopNav() {
           </div>
         </div>
 
-        {/* Right Header Controls: Alerts + User Profile + Logout */}
-        <div className="flex items-center space-x-3 text-xs">
+        {/* Right Header Controls: Language Selector + Alerts + User Profile + Logout */}
+        <div className="flex items-center space-x-2 sm:space-x-3 text-xs">
+          {/* Language Switcher Button */}
+          <button
+            onClick={() => setShowLangModal(true)}
+            className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-800 hover:text-[#1e3a5f] font-semibold px-2.5 py-1.5 rounded border border-slate-300 transition-all text-xs shadow-sm active:scale-95"
+            title="Select Language / भाषा बदलें / ભાષા બદલો"
+          >
+            <Globe size={14} className="text-[#1e3a5f]" />
+            <span className="text-sm">{activeLang?.flag || "🌐"}</span>
+            <span className="font-bold">{activeLang?.native || "English"}</span>
+            <ChevronDown size={12} className="text-slate-400" />
+          </button>
+
           {alertCount > 0 ? (
             <span className="bg-[#800000] text-white font-bold px-2.5 py-1 rounded text-xs shadow-sm">
-              {alertCount} Alerts
+              {alertCount} {t("nav.alerts") || "Alerts"}
             </span>
           ) : (
             <span className="bg-emerald-700 text-white font-semibold px-2.5 py-1 rounded text-xs">
-              Herd Nominal
+              {t("dashboard.safe") || "Herd Nominal"}
             </span>
           )}
 
@@ -89,12 +111,12 @@ export default function TopNav() {
       <nav className="bg-[#1e3a5f] text-white">
         <div className="max-w-7xl mx-auto px-4 flex space-x-1 overflow-x-auto text-xs font-semibold uppercase tracking-wider">
           {[
-            { to: "/dashboard", label: "Dashboard" },
-            { to: "/cattle", label: "Cattle Registry" },
-            { to: "/predict", label: "Quick Check" },
-            { to: "/alerts", label: "Alerts" },
-            { to: "/analytics", label: "Epidemiology" },
-            { to: "/settings", label: "Configuration" },
+            { to: "/dashboard", label: t("nav.home") || "Dashboard" },
+            { to: "/cattle", label: t("nav.cattle") || "Cattle Registry" },
+            { to: "/predict", label: t("nav.predict") || "Quick Check" },
+            { to: "/alerts", label: t("nav.alerts") || "Alerts" },
+            { to: "/analytics", label: t("nav.analytics") || "Epidemiology" },
+            { to: "/settings", label: t("nav.settings") || "Configuration" },
           ].map((item) => (
             <NavLink
               key={item.to}
@@ -112,6 +134,9 @@ export default function TopNav() {
           ))}
         </div>
       </nav>
+
+      {/* Language Selector Modal */}
+      {showLangModal && <LanguageSelector onClose={() => setShowLangModal(false)} />}
     </header>
   );
 }

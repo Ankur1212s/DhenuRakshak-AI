@@ -1,3 +1,5 @@
+import i18n from '../i18n';
+
 // Dynamic Web Translation Controller for MASTITIS AI
 // Automatically translates all website text on the fly without hardcoding dictionary keys
 
@@ -29,13 +31,16 @@ export function setGoogleTranslateCookie(langCode) {
   if (typeof document === 'undefined') return;
   const host = window.location.hostname;
 
+  // Expire any existing cookie first across multiple domain variations
+  const expire = 'expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  document.cookie = `googtrans=; path=/; ${expire}`;
+  document.cookie = `googtrans=; path=/; domain=${host}; ${expire}`;
+  document.cookie = `googtrans=; path=/; domain=.${host}; ${expire}`;
+
   if (!langCode || langCode === 'en') {
-    // Clear translate cookie to restore English
-    document.cookie = 'googtrans=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    document.cookie = `googtrans=; path=/; domain=${host}; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
-    document.cookie = `googtrans=; path=/; domain=.${host}; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
     document.cookie = 'googtrans=/en/en; path=/;';
     document.cookie = `googtrans=/en/en; path=/; domain=${host};`;
+    document.cookie = `googtrans=/en/en; path=/; domain=.${host};`;
   } else {
     const val = `/en/${langCode}`;
     document.cookie = `googtrans=${val}; path=/;`;
@@ -67,6 +72,15 @@ export function applyLanguage(langCode, options = { reload: true }) {
   const targetLang = langCode || 'en';
   localStorage.setItem('mastitrack_lang', targetLang);
   setGoogleTranslateCookie(targetLang);
+
+  if (document.documentElement) {
+    document.documentElement.lang = targetLang;
+  }
+
+  // Update react-i18next immediately
+  if (i18n && typeof i18n.changeLanguage === 'function') {
+    i18n.changeLanguage(targetLang);
+  }
 
   // Notify custom listeners
   window.dispatchEvent(

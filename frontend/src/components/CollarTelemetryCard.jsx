@@ -1,30 +1,57 @@
-import { useState, useEffect } from "react";
-import { Activity, Radio, Thermometer, MapPin, CheckCircle, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Activity, Radio, Thermometer, MapPin, CheckCircle, AlertTriangle, RefreshCw } from "lucide-react";
 
 export default function CollarTelemetryCard() {
   const [telemetry, setTelemetry] = useState(null);
   const [isLive, setIsLive] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchTelemetry = useCallback(async (manual = false) => {
+    // If automatic poll and tab is hidden in background, skip to conserve Netlify credits
+    if (!manual && typeof document !== "undefined" && document.hidden) {
+      return;
+    }
+    if (manual) setIsRefreshing(true);
+
+    try {
+      const res = await fetch("/api/telemetry");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.telemetry) {
+          setTelemetry(data.telemetry);
+          setIsLive(true);
+        }
+      }
+    } catch (err) {
+      setIsLive(false);
+    } finally {
+      if (manual) {
+        setTimeout(() => setIsRefreshing(false), 500);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchTelemetry = async () => {
-      try {
-        const res = await fetch("/api/telemetry");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.telemetry) {
-            setTelemetry(data.telemetry);
-            setIsLive(true);
-          }
-        }
-      } catch (err) {
-        setIsLive(false);
+    fetchTelemetry(false);
+
+    // Adaptive 30s cadence (conserves >90% Netlify credits while matching 35s cattle IoT cadence)
+    const interval = setInterval(() => {
+      fetchTelemetry(false);
+    }, 30000);
+
+    // Sync fresh data when user switches back to this tab
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchTelemetry(false);
       }
     };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    fetchTelemetry();
-    const interval = setInterval(fetchTelemetry, 3000);
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchTelemetry]);
 
   if (!telemetry) return null;
 
@@ -65,6 +92,17 @@ export default function CollarTelemetryCard() {
           </div>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          {/* Manual Sync Button */}
+          <button
+            onClick={() => fetchTelemetry(true)}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-semibold bg-slate-50 dark:bg-[#162a21] hover:bg-slate-100 dark:hover:bg-[#1f382c] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a2f] transition-all active:scale-95 shadow-sm"
+            title="Fetch latest IoT node telemetry immediately"
+          >
+            <RefreshCw size={12} className={isRefreshing ? "animate-spin text-emerald-600" : ""} />
+            <span>{isRefreshing ? "Syncing..." : "Sync Now"}</span>
+          </button>
+
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
             <span>Telemetry Uplink Active</span>

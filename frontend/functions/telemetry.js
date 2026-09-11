@@ -130,6 +130,11 @@ export default async function handler(req, context) {
   }
 
   // ── GET: Query cow data directly from your MongoDB Atlas Database ──
+  const getHeaders = {
+    ...headers,
+    "Cache-Control": "public, max-age=10, s-maxage=10, stale-while-revalidate=30"
+  };
+
   try {
     const url = new URL(req.url);
     const cowParam = url.searchParams.get("cow") || url.searchParams.get("cattle_id") || url.searchParams.get("rfid") || url.searchParams.get("rfid_tag");
@@ -159,7 +164,7 @@ export default async function handler(req, context) {
         count: cowLogs.length,
         telemetry: cowLogs[0] || fallbackTelemetry,
         history: cowLogs
-      }), { status: 200, headers });
+      }), { status: 200, headers: getHeaders });
     }
 
     // Default: Return latest telemetry document from MongoDB
@@ -169,13 +174,13 @@ export default async function handler(req, context) {
       success: true,
       database: "MongoDB Atlas (Cluster0)",
       telemetry: latestDoc[0] || fallbackTelemetry
-    }), { status: 200, headers });
+    }), { status: 200, headers: getHeaders });
   } catch (err) {
     // Graceful fallback to memory
     return new Response(JSON.stringify({
       success: true,
       database: "Fallback Memory",
       telemetry: fallbackTelemetry
-    }), { status: 200, headers });
+    }), { status: 200, headers: getHeaders });
   }
 }

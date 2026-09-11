@@ -1,11 +1,20 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { Globe, ChevronDown } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
+import LanguageSelector, { LANGUAGES } from '../components/LanguageSelector';
+import { getStoredLanguage } from '../utils/translator';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const { login } = useAuthStore();
+  const [showLangModal, setShowLangModal] = useState(false);
+
+  const currentSavedLang = getStoredLanguage();
+  const activeLang = LANGUAGES.find((l) => l.code === (currentSavedLang || i18n.language)) || LANGUAGES[0];
 
   const [isRegister, setIsRegister] = useState(false);
   const [step, setStep] = useState('phone'); // 'phone' | 'otp'
@@ -100,9 +109,22 @@ export default function Login() {
               </p>
             </div>
           </div>
-          <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded font-semibold border border-slate-200">
-            Secure Portal
-          </span>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => setShowLangModal(true)}
+              className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-800 hover:text-[#1e3a5f] font-semibold px-2.5 py-1.5 rounded border border-slate-300 transition-all text-xs shadow-sm active:scale-95"
+              title="Select Language / भाषा चुनें / ભાષા પસંદ કરો"
+            >
+              <Globe size={14} className="text-[#1e3a5f]" />
+              <span className="text-sm">{activeLang?.flag || "🌐"}</span>
+              <span className="font-bold">{activeLang?.native || "English"}</span>
+              <ChevronDown size={12} className="text-slate-400" />
+            </button>
+            <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded font-semibold border border-slate-200 hidden sm:inline">
+              Secure Portal
+            </span>
+          </div>
         </div>
       </header>
 
@@ -283,6 +305,9 @@ export default function Login() {
       <footer className="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-500">
         LactoGuard Precision Health Platform • Developed under Indian Dairy Health & SIH Problem Statement #109
       </footer>
+
+      {/* Language Selector Modal */}
+      {showLangModal && <LanguageSelector onClose={() => setShowLangModal(false)} />}
     </div>
   );
 }
