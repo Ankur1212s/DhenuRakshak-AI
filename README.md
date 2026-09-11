@@ -1,4 +1,4 @@
-# 🐄 LactoGuard (DhenuRakshak AI)
+# 🐄 LactoGuard AI
 ### Frugal Multi-Modal IoT & Edge AI Ecosystem for Pre-Clinical Bovine Mastitis Early Warning
 **Smart India Hackathon 2026 | Problem Statement: Early Detection and Prevention of Bovine Mastitis in Dairy Cattle**
 
@@ -221,6 +221,6 @@ DhenuRakshak-AI/
 ---
 
 ## 👥 Team & Hackathon Credentials
-* **Project:** LactoGuard (DhenuRakshak AI)
+* **Project:** LactoGuard AI
 * **Hackathon:** Smart India Hackathon 2026
 * **License:** MIT Open Source License

@@ -1,6 +1,6 @@
 /*
  * =====================================================================================
- *  🐄 LactoGuard / DhenuRakshak AI — Central ESP32 Edge Gateway (ESP-NOW + Wi-Fi)
+ *  🐄 LactoGuard AI — Central ESP32 Edge Gateway (ESP-NOW + Wi-Fi)
  *  Zero Raspberry Pi Architecture!
  *  Target Hardware: Central ESP32 DevKit V1 (30/38 pin)
  * =====================================================================================
@@ -245,7 +245,7 @@ void setup() {
   digitalWrite(PIN_STATUS_LED, LOW);
 
   Serial.println(F("\n======================================================="));
-  Serial.println(F("🐄 LactoGuard / DhenuRakshak AI — Central ESP32 Gateway"));
+  Serial.println(F("🐄 LactoGuard AI — Central ESP32 Gateway"));
   Serial.println(F("   [ESP-NOW Multi-Node Receiver -> MongoDB Atlas Cloud]"));
   Serial.println(F("   Zero Raspberry Pi Needed!"));
   Serial.println(F("======================================================="));

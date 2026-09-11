@@ -1,5 +1,5 @@
 /**
- * app.js — DhenuRakshak AI (MastiTrack) Core Client Application
+ * app.js — LactoGuard AI (MastiTrack) Core Client Application
  * Smart India Hackathon 2024 | Problem Statement 109
  * AI-Based Predictive Modelling for Early Forecasting of Bovine Mastitis
  */

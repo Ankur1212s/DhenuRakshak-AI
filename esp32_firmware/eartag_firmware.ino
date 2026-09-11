@@ -1,6 +1,6 @@
 /*
  * =====================================================================================
- *  🐄 LactoGuard / DhenuRakshak AI — Smart Cattle Ear Tag Node
+ *  🐄 LactoGuard AI — Smart Cattle Ear Tag Node
  *  Power Architecture: Smart Sleep & Rumination-Activated Telemetry
  *  Protocol: ESP-NOW (Transmits directly to Central ESP32 Gateway — No Raspberry Pi!)
  *  Target Hardware: ESP32 DevKit V1 / ESP32-WROOM / ESP32-C3
@@ -377,7 +377,7 @@ void setup() {
   digitalWrite(PIN_STATUS_LED, LOW);
 
   Serial.println(F("\n======================================================="));
-  Serial.println(F("🐄 LactoGuard / DhenuRakshak — Smart Cattle Ear Tag Node"));
+  Serial.println(F("🐄 LactoGuard AI — Smart Cattle Ear Tag Node"));
   Serial.println(F("   [POWER-OPTIMIZED RUMINATION DETECTOR & ESP-NOW BURST]"));
   Serial.println(F("   Wi-Fi Sleep: Radio OFF until rumination is confirmed."));
   Serial.println(F("   Active Cadence: Transmits every 35s during cud-chewing."));

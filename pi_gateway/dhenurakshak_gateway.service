@@ -1,5 +1,5 @@
 [Unit]
-Description=DhenuRakshak AI Edge Gateway Daemon (Pi 3B+)
+Description=LactoGuard AI Edge Gateway Daemon (Pi 3B+)
 After=network.target network-online.target
 Wants=network-online.target
 

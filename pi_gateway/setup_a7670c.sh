@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 # setup_a7670c.sh — Automated 4G LTE Configuration for SIMCOM A7670C on Raspberry Pi
-# DhenuRakshak AI | Smart India Hackathon Problem Statement #109
+# LactoGuard AI | Smart India Hackathon Problem Statement #109
 # ==============================================================================
 # Supports: Jio, Airtel, Vi (Vodafone-Idea), BSNL
 # Provides dual-mode setup:
@@ -12,7 +12,7 @@
 set -e
 
 echo "=========================================================="
-echo "🐄 DhenuRakshak AI — A7670C 4G LTE Module Setup Script"
+echo "🐄 LactoGuard AI — A7670C 4G LTE Module Setup Script"
 echo "=========================================================="
 
 if [ "$EUID" -ne 0 ]; then
@@ -78,7 +78,7 @@ echo "✅ Saved /etc/wvdial.conf"
 # 5. Create Systemd Service for Auto-reconnecting 4G LTE
 cat <<EOF > /etc/systemd/system/a7670c-cellular.service
 [Unit]
-Description=DhenuRakshak A7670C 4G LTE Auto-Dialer
+Description=LactoGuard A7670C 4G LTE Auto-Dialer
 After=network.target
 
 [Service]

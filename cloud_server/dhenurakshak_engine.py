@@ -1,5 +1,5 @@
 """
-dhenurakshak_engine.py — DhenuRakshak AI: Calibrated 7-14 Day Bovine Mastitis Forecasting Engine
+dhenurakshak_engine.py — LactoGuard AI: Calibrated 7-14 Day Bovine Mastitis Forecasting Engine
 Smart India Hackathon (SIH) Problem Statement 109
 
 Veterinary AI Multi-Factor Ensemble:
@@ -285,7 +285,7 @@ class DhenuRakshakPredictor:
         return {
             "cattle_id": cattle_id,
             "cow_name": cow_name,
-            "engine": "DhenuRakshak AI — 7-14 Day Predictive Model",
+            "engine": "LactoGuard AI — 7-14 Day Predictive Model",
             "risk_level": risk_level,
             "risk_score": risk_score,
             "risk_badge": risk_badge,

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 test_cloud_api.py
-Tests the cloud server API endpoints and the DhenuRakshak predictive engine.
+Tests the cloud server API endpoints and the LactoGuard predictive engine.
 """
 
 import os

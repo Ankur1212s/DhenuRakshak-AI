@@ -481,7 +481,7 @@ def run_server():
     server_address = ("", PORT)
     httpd = ThreadingHTTPServer(server_address, AppRequestHandler)
     print(f"\n========================================================")
-    print(f"🐄 DhenuRakshak AI — Bovine Mastitis Early Warning System")
+    print(f"🐄 LactoGuard AI — Bovine Mastitis Early Warning System")
     print(f"🏆 Smart India Hackathon (SIH) Problem Statement 109")
     print(f"========================================================")
     print(f"🌾 Server running at: http://localhost:{PORT}")

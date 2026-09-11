@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-edge_gateway.py — DhenuRakshak AI Edge Gateway Daemon for Raspberry Pi 3B+
+edge_gateway.py — LactoGuard AI Edge Gateway Daemon for Raspberry Pi 3B+
 Smart India Hackathon (SIH) | Problem Statement #109
 
 Operating Modes:
@@ -8,7 +8,7 @@ Operating Modes:
    - Streams live sensor telemetry to Cloud Website API (/api/telemetry).
    - Drains & synchronizes offline SQLite backlog cache.
 2. Offline Mode (Zero Internet in Remote Barn or Pasture):
-   - Executes DhenuRakshak Edge AI Model locally on Pi 3B+ CPU.
+   - Executes LactoGuard Edge AI Model locally on Pi 3B+ CPU.
    - Evaluates 7-14 Day Mastitis Risk & Rumination Deficit Index.
    - Caches records locally in SQLite (pi_edge_cache.db) with auto-sync on reconnect.
 """
@@ -139,7 +139,7 @@ class DhenuRakshakGateway:
 
     def fetch_esp32_telemetry(self) -> dict:
         """Fetches real-time sensor JSON from ESP32 collar node."""
-        req = Request(self.esp32_url, headers={"User-Agent": "DhenuRakshak-Pi-Gateway/2.0"})
+        req = Request(self.esp32_url, headers={"User-Agent": "LactoGuard-Pi-Gateway/2.0"})
         with urlopen(req, timeout=2.5) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return data
@@ -150,7 +150,7 @@ class DhenuRakshakGateway:
         payload = json.dumps(telemetry).encode("utf-8")
         req = Request(target_url, data=payload, headers={
             "Content-Type": "application/json",
-            "User-Agent": "DhenuRakshak-Pi-Gateway/2.0"
+            "User-Agent": "LactoGuard-Pi-Gateway/2.0"
         })
         with urlopen(req, timeout=3.5) as resp:
             return resp.status in (200, 201)
@@ -243,14 +243,14 @@ class DhenuRakshakGateway:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="DhenuRakshak AI Edge Gateway Daemon for Raspberry Pi 3B+")
+    parser = argparse.ArgumentParser(description="LactoGuard AI Edge Gateway Daemon for Raspberry Pi 3B+")
     parser.add_argument("--esp32", default=DEFAULT_ESP32_URL, help=f"ESP32 Telemetry URL (default: {DEFAULT_ESP32_URL})")
     parser.add_argument("--cloud", default=DEFAULT_CLOUD_URL, help=f"Cloud Server URL (default: {DEFAULT_CLOUD_URL})")
     parser.add_argument("--interval", type=float, default=POLL_INTERVAL_SEC, help=f"Poll interval in seconds (default: {POLL_INTERVAL_SEC})")
     args = parser.parse_args()
 
     print("\n===========================================================")
-    print("🐄 DhenuRakshak AI — Raspberry Pi 3B+ Edge Gateway Starting")
+    print("🐄 LactoGuard AI — Raspberry Pi 3B+ Edge Gateway Starting")
     print("🏆 Smart India Hackathon | Problem Statement #109")
     print("===========================================================")
     print(f"📡 ESP32 Source Node: {args.esp32}")
@@ -266,7 +266,7 @@ def main():
             gateway.run_cycle()
             time.sleep(args.interval)
     except KeyboardInterrupt:
-        print("\nStopping DhenuRakshak Edge Gateway...")
+        print("\nStopping LactoGuard Edge Gateway...")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-﻿import { NavLink } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { Terminal, Layers, Stethoscope, Bell, LineChart, BookOpen, Settings, Power } from "lucide-react";
 import useCattleStore from "../store/cattleStore";
 
@@ -21,15 +21,15 @@ export default function DesktopNav() {
       {/* Brand Header */}
       <div className="p-3.5 border-b border-[#30363d]">
         <div className="flex items-center space-x-2">
-          <div className="w-7 h-7 bg-[#238636] text-black rounded flex items-center justify-center font-bold">
-            DR
+          <div className="w-7 h-7 bg-[#1e3a5f] text-amber-300 rounded flex items-center justify-center font-bold">
+            LG
           </div>
           <div>
             <div className="font-bold text-[#f0f6fc] tracking-wider text-xs">
-              DHENURAKSHAK
+              LACTOGUARD AI
             </div>
             <div className="text-[10px] text-[#8b949e]">
-              EAR-TAG CONSOLE
+              PRECISION BOVINE CONSOLE
             </div>
           </div>
         </div>

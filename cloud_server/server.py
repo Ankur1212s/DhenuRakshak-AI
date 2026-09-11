@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-server.py — DhenuRakshak AI Full-Stack Cloud Server
+server.py — LactoGuard AI Full-Stack Cloud Server
 Smart India Hackathon (SIH) | Problem Statement #109
 Predictive Forecasting of Bovine Mastitis (7-14 Days in Advance)
 
@@ -25,7 +25,7 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 from typing import Any, Dict
 
-# Import DhenuRakshak AI prediction engine
+# Import LactoGuard AI prediction engine
 from dhenurakshak_engine import predictor
 
 PORT = int(os.environ.get("PORT", 5173))
@@ -213,7 +213,7 @@ class DhenuRakshakHandler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             self._send_json({
                 "status": "healthy",
-                "service": "DhenuRakshak AI Cloud Backend",
+                "service": "LactoGuard AI Cloud Backend",
                 "version": "3.0.0",
                 "platform": "Smart India Hackathon 2026 (Problem Statement 109)",
                 "engine": "7-14 Day Bovine Mastitis Early Forecasting Ensemble",
@@ -347,8 +347,8 @@ class DhenuRakshakHandler(SimpleHTTPRequestHandler):
                         pred["cow_name"],
                         "7_14_DAY_PREDICTION" if pred["risk_level"] == "MEDIUM" else "CLINICAL_ALERT",
                         pred["risk_level"],
-                        f"DhenuRakshak Alert: {pred['risk_level']} Mastitis Risk for {pred['cow_name']}",
-                        f"धेनुरक्षक चेतावनी: {pred['cow_name']} में थनैला का {pred['risk_label_hi']}!",
+                        f"LactoGuard Alert: {pred['risk_level']} Mastitis Risk for {pred['cow_name']}",
+                        f"लैक्टोगार्ड चेतावनी: {pred['cow_name']} में थनैला का {pred['risk_label_hi']}!",
                         pred["summary_en"] + pred["forecast_window_en"],
                         pred["summary_en"] + pred["forecast_window_hi"],
                         now_iso
@@ -402,7 +402,7 @@ def run_server():
     server_address = ("", PORT)
     httpd = ThreadingHTTPServer(server_address, DhenuRakshakHandler)
     print("\n===========================================================")
-    print("🐄 DhenuRakshak AI — Cloud Predictive Server Running!")
+    print("🐄 LactoGuard AI — Cloud Predictive Server Running!")
     print("🏆 Smart India Hackathon | Problem Statement #109")
     print("===========================================================")
     print(f"🌾 Web Dashboard:    http://localhost:{PORT}")
@@ -413,7 +413,7 @@ def run_server():
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping DhenuRakshak Server...")
+        print("\nStopping LactoGuard Server...")
         httpd.server_close()
 
 

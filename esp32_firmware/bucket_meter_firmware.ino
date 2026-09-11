@@ -1,6 +1,6 @@
 /*
  * =====================================================================================
- *  🐄 LactoGuard / DhenuRakshak AI — Smart Milking Bucket Handheld Meter Firmware
+ *  🐄 LactoGuard AI — Smart Milking Bucket Handheld Meter Firmware
  *  Protocol: ESP-NOW (Ultra low-latency, connectionless, direct to Central Gateway)
  *  Target Hardware: ESP32 DevKit V1 (30/38 pin)
  * =====================================================================================
